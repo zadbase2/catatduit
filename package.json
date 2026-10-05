@@ -10,7 +10,9 @@
     "test": "node test-backend.js",
     "test:backend": "node test-backend.js",
     "test:vercel": "node test-vercel-readiness.js",
-    "test:gemini": "node test-gemini.js"
+    "test:gemini": "node test-gemini.js",
+    "cap:sync": "node copy-www.js && npx cap sync android",
+    "cap:open": "npx cap open android"
   },
   "keywords": [
     "finance",
@@ -23,6 +25,9 @@
   "author": "CatatDuit Team",
   "license": "MIT",
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
     "pg": "^8.23.1"
   }
 }

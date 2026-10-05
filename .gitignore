@@ -11,6 +11,7 @@ yarn-error.log*
 
 # Local Database & Cache
 data/
+www/
 *.sqlite
 *.db
 

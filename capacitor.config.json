@@ -1,0 +1,10 @@
+{
+  "appId": "com.catatduit.app",
+  "appName": "CatatDuit",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "server": {
+    "url": "https://catatduit-seven.vercel.app",
+    "cleartext": true
+  }
+}
