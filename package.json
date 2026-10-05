@@ -4,6 +4,7 @@
   "description": "Frontend CatatDuit - Pencatatan Keuangan Pribadi Berbasis AI Chatbot",
   "main": "server.js",
   "scripts": {
+    "build": "echo 'Static assets and Serverless API ready'",
     "dev": "node server.js",
     "start": "node server.js",
     "test": "node test-backend.js",
