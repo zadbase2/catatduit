@@ -12,6 +12,7 @@ yarn-error.log*
 # Local Database & Cache
 data/
 www/
+apk-build/
 *.sqlite
 *.db
 
