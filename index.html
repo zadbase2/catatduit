@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>CatatDuit — Financial Intelligence & Arus Kas Pribadi (Paper.id Inspired)</title>
+  <meta name="description" content="Aplikasi pencatatan keuangan pribadi & arus kas bisnis modern dengan antarmuka Paper.id, AI natural language parsing, dan offline-first.">
+  <meta name="theme-color" content="#132b43">
+
+  <!-- Google Fonts: Plus Jakarta Sans (Indonesian Fintech Standard) & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="css/style.css?v=2.5">
+  <link rel="stylesheet" href="css/components.css?v=2.5">
+  <link rel="stylesheet" href="css/responsive.css?v=2.5">
+</head>
+<body>
+
+  <!-- Mobile Drawer Backdrop -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="UI.toggleMobileDrawer(false)"></div>
+
+  <div class="app-container">
+
+    <!-- =========================================
+         LEFT SIDEBAR (Paper.id Deep Navy)
+         ========================================= -->
+    <aside class="app-sidebar" id="appSidebar">
+      <!-- Brand Logo -->
+      <div class="sidebar-brand">
+        <div class="brand-logo-wrapper" onclick="UI.switchTab('dashboard')">
+          <div class="brand-loop-icon">CD</div>
+          <div class="brand-title">Catat<span>Duit</span></div>
+        </div>
+      </div>
+
+      <!-- Navigation Menu -->
+      <nav class="sidebar-nav" aria-label="Menu Utama">
+        <div class="nav-section-title">Navigasi Utama</div>
+
+        <!-- Tab 1: Dashboard (Default Paper.id Home) -->
+        <button class="sidebar-nav-item active" data-tab="dashboard" id="sideNavDashboard">
+          <div class="nav-item-left">
+            <span class="nav-icon">📊</span>
+            <span>Dashboard</span>
+          </div>
+          <span class="nav-chevron">›</span>
+        </button>
+
+        <!-- Tab 2: Chat AI Copilot -->
+        <button class="sidebar-nav-item" data-tab="chat" id="sideNavChat">
+          <div class="nav-item-left">
+            <span class="nav-icon">🤖</span>
+            <span>Chat Asisten AI</span>
+          </div>
+          <span class="nav-badge-new">New!</span>
+        </button>
+
+        <!-- Tab 3: Pemasukan (Cash In / PaperPay In) -->
+        <button class="sidebar-nav-item" data-tab="income" id="sideNavIncome">
+          <div class="nav-item-left">
+            <span class="nav-icon">💰</span>
+            <span>Pemasukan</span>
+          </div>
+          <span class="nav-chevron">›</span>
+        </button>
+
+        <!-- Tab 4: Pengeluaran (Cash Out / PaperPay Out) -->
+        <button class="sidebar-nav-item" data-tab="expense" id="sideNavExpense">
+          <div class="nav-item-left">
+            <span class="nav-icon">💸</span>
+            <span>Pengeluaran</span>
+          </div>
+          <span class="nav-chevron">›</span>
+        </button>
+
+        <!-- Tab 5: Laporan & Statistik -->
+        <button class="sidebar-nav-item" data-tab="stats" id="sideNavStats">
+          <div class="nav-item-left">
+            <span class="nav-icon">📈</span>
+            <span>Laporan & Grafik</span>
+          </div>
+          <span class="nav-chevron">›</span>
+        </button>
+
+        <!-- Tab 6: Pengaturan & Kategori -->
+        <button class="sidebar-nav-item" data-tab="settings" id="sideNavSettings">
+          <div class="nav-item-left">
+            <span class="nav-icon">⚙️</span>
+            <span>Pengaturan</span>
+          </div>
+          <span class="nav-chevron">›</span>
+        </button>
+      </nav>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <div style="display: flex; align-items: center; justify-content: space-between; color: var(--navy-sidebar-text); font-size: 11.5px; opacity: 0.85;">
+          <span>CatatDuit v2.4</span>
+          <span style="color: #10b981; font-weight: 600;">● Aktif</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- =========================================
+         MAIN APPLICATION AREA
+         ========================================= -->
+    <div class="app-main">
+
+      <!-- TOP HEADER BAR (Paper.id White Clean Topbar) -->
+      <header class="top-header">
+        <div class="header-left">
+          <!-- Mobile Hamburger Toggle -->
+          <button class="mobile-menu-btn" onclick="UI.toggleMobileDrawer(true)" aria-label="Buka Menu">
+            ☰
+          </button>
+
+          <!-- Company / Profile Selector (Matches Paper.id Left Header) -->
+          <div class="company-profile-chip" onclick="UI.switchTab('settings')" title="Klik untuk buka Pengaturan">
+            <div class="company-badge-icon">🛡️</div>
+            <div class="company-meta">
+              <span class="company-name">AZRIEL <small>∨</small></span>
+              <span class="company-status">● Verifikasi Berhasil</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <!-- Offline / Online Sync Indicator -->
+          <button class="sync-indicator-btn online" id="syncStatusIndicator" onclick="UI.toggleOfflineSimulator()" title="Klik untuk simulasi Mode Offline / Online">
+            <span class="pulse-dot"></span>
+            <span id="syncStatusText">Online</span>
+          </button>
+
+          <!-- Theme Mode Toggle -->
+          <button class="header-action-btn" id="themeToggleBtn" onclick="UI.toggleTheme()" title="Ganti Mode Gelap / Terang">
+            🌙
+          </button>
+
+          <!-- User Account Pill -->
+          <div class="user-profile-pill">
+            <div class="user-avatar-circle">AZ</div>
+            <span class="user-name-text">Azriel <small>∨</small></span>
+          </div>
+        </div>
+      </header>
+
+      <!-- CONTENT CANVAS (Houses All Tabs) -->
+      <main class="content-canvas">
+
+        <!-- =========================================
+             TAB 1: DASHBOARD (EXACT PAPER.ID LAYOUT)
+             ========================================= -->
+        <section class="tab-pane active" id="tab-dashboard">
+          
+          <!-- ROW 1: TOP 3 FINANCIAL HERO CARDS -->
+          <div class="paper-cards-grid">
+            
+            <!-- Card 1: Total Saldo Aktif (Exact Hero Gradient from Paper.id) -->
+            <div class="paper-hero-card">
+              <div class="hero-header-row">
+                <div class="hero-label-group">
+                  <span class="hero-label-title">Total Saldo Aktif</span>
+                  <button class="hero-eye-btn" id="balanceEyeBtn" onclick="UI.toggleBalanceVisibility()" title="Tampilkan / Sembunyikan Saldo">
+                    👁️
+                  </button>
+                </div>
+              </div>
+
+              <div class="hero-amount-row">
+                <div class="hero-main-amount tabular-nums" id="mainHeroBalance">Rp 0</div>
+                <button class="hero-cta-btn" onclick="UI.openTransactionModal('add')">
+                  <span>➕</span> Catat Transaksi
+                </button>
+              </div>
+
+              <div class="hero-footer-divider">
+                <div class="hero-footer-left">
+                  <span>Dana Hari Ini</span>
+                  <span title="Pergerakan kas masuk dan keluar hari ini">ℹ️</span>
+                </div>
+                <div class="hero-footer-right tabular-nums" id="todayBalanceVal">Rp 0</div>
+              </div>
+            </div>
+
+            <!-- Card 2: Piutang Usaha / Total Pemasukan Bulan Ini -->
+            <div class="paper-stat-card">
+              <div>
+                <div class="stat-card-top">
+                  <div class="stat-card-title-group">
+                    <span>Total Pemasukan Bulan Ini</span>
+                    <span class="stat-card-info-icon" title="Akumulasi seluruh pemasukan tercatat bulan ini">ℹ️</span>
+                  </div>
+                  <button class="stat-refresh-btn" onclick="UI.renderAll()" title="Segarkan Data">🔄</button>
+                </div>
+                <div class="stat-card-amount tabular-nums" id="heroMonthlyIncome">Rp 0</div>
+                <div class="stat-card-metrics-row">
+                  <div class="metric-badge-item success" id="dashIncomeCountBadge">● Pemasukan Aktif</div>
+                  <div class="metric-badge-item neutral">Hari ini: <strong class="tabular-nums" id="todayIncomeVal">Rp 0</strong></div>
+                </div>
+              </div>
+              <div class="stat-card-action-row">
+                <button class="stat-card-link-btn" onclick="UI.switchTab('income')">
+                  Lihat Semua Pemasukan →
+                </button>
+              </div>
+            </div>
+
+            <!-- Card 3: Utang Usaha / Total Pengeluaran Bulan Ini -->
+            <div class="paper-stat-card">
+              <div>
+                <div class="stat-card-top">
+                  <div class="stat-card-title-group">
+                    <span>Total Pengeluaran Bulan Ini</span>
+                    <span class="stat-card-info-icon" title="Akumulasi seluruh pengeluaran tercatat bulan ini">ℹ️</span>
+                  </div>
+                  <button class="stat-refresh-btn" onclick="UI.renderAll()" title="Segarkan Data">🔄</button>
+                </div>
+                <div class="stat-card-amount tabular-nums" id="heroMonthlyExpense">Rp 0</div>
+                <div class="stat-card-metrics-row">
+                  <div class="metric-badge-item danger" id="dashExpenseCountBadge">● Pengeluaran Aktif</div>
+                  <div class="metric-badge-item neutral">Hari ini: <strong class="tabular-nums" id="todayExpenseVal">Rp 0</strong></div>
+                </div>
+              </div>
+              <div class="stat-card-action-row">
+                <button class="stat-card-link-btn" onclick="UI.switchTab('expense')">
+                  Lihat Semua Pengeluaran →
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ROW 2: "KEBUTUHAN BISNIS/KEUANGAN ANDA" (4 Quick Feature Cards) -->
+          <div class="section-header-group">
+            <h2 class="section-title">Kebutuhan Keuangan Anda</h2>
+            <p class="section-subtitle">Akses fitur pencatatan AI, pelacakan arus kas, serta pantau transaksi keuangan Anda dengan mudah</p>
+          </div>
+
+          <div class="quick-feature-grid">
+            <!-- Box 1: Catat Pengeluaran AI -->
+            <div class="quick-feature-box" onclick="UI.switchTab('chat')">
+              <div>
+                <h3 class="feature-box-title">Catat Transaksi via AI</h3>
+                <p class="feature-box-desc">Ketik percakapan santai seperti "beli esteh 5k", AI Gemini otomatis mengekstrak nominal dan kategori.</p>
+              </div>
+              <div class="feature-box-icon">🤖</div>
+            </div>
+
+            <!-- Box 2: Catat Pemasukan -->
+            <div class="quick-feature-box" onclick="UI.openTransactionModal('add', null, 'income')">
+              <div>
+                <h3 class="feature-box-title">Catat Pemasukan</h3>
+                <p class="feature-box-desc">Input transferan masuk, gaji bulanan, penjualan, atau honor freelance.</p>
+              </div>
+              <div class="feature-box-icon">💰</div>
+            </div>
+
+            <!-- Box 3: Catat Pengeluaran Manual -->
+            <div class="quick-feature-box" onclick="UI.openTransactionModal('add', null, 'expense')">
+              <div>
+                <h3 class="feature-box-title">Catat Pengeluaran</h3>
+                <p class="feature-box-desc">Input belanja harian, tagihan listrik, makan, atau operasional secara manual.</p>
+              </div>
+              <div class="feature-box-icon">💳</div>
+            </div>
+
+            <!-- Box 4: Laporan & Statistik -->
+            <div class="quick-feature-box" onclick="UI.switchTab('stats')">
+              <div>
+                <h3 class="feature-box-title">Laporan & Statistik</h3>
+                <p class="feature-box-desc">Pantau grafik tren 14 hari, rasio hemat, dan breakdown pengeluaran terinci.</p>
+              </div>
+              <div class="feature-box-icon">📈</div>
+            </div>
+          </div>
+
+          <!-- ROW 3: TWO-COLUMN MAIN CONTENT (PaperPay In & Out Lists + Right Promo/Access Sidebar) -->
+          <div class="dashboard-split-row">
+            
+            <!-- Left 2 Columns: Riwayat Pemasukan (PaperPay In) & Riwayat Pengeluaran (PaperPay Out) -->
+            <div class="transactions-double-col">
+              
+              <!-- PaperPay In Style: Riwayat Pemasukan Terbaru -->
+              <div class="paper-table-card">
+                <div class="table-card-header">
+                  <div class="table-card-left">
+                    <div class="table-badge-icon in">💰</div>
+                    <div class="table-header-titles">
+                      <span class="table-main-title">Riwayat Pemasukan</span>
+                      <span class="table-sub-title">Arus kas masuk & pembayaran diterima</span>
+                    </div>
+                  </div>
+                  <button class="table-view-all-link" onclick="UI.switchTab('income')">Lihat Semua</button>
+                </div>
+                <div class="paper-tx-list" id="dashboardRecentIncomeList">
+                  <!-- Injected via ui.js -->
+                </div>
+              </div>
+
+              <!-- PaperPay Out Style: Riwayat Pengeluaran Terbaru -->
+              <div class="paper-table-card">
+                <div class="table-card-header">
+                  <div class="table-card-left">
+                    <div class="table-badge-icon out">💸</div>
+                    <div class="table-header-titles">
+                      <span class="table-main-title">Riwayat Pengeluaran</span>
+                      <span class="table-sub-title">Belanja, utilitas & biaya operasional</span>
+                    </div>
+                  </div>
+                  <button class="table-view-all-link" onclick="UI.switchTab('expense')">Lihat Semua</button>
+                </div>
+                <div class="paper-tx-list" id="dashboardRecentExpenseList">
+                  <!-- Injected via ui.js -->
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Right Column: Promo Card ("Khusus untuk Pengguna Baru!") & PlayStore / Wi-Fi Card -->
+            <div class="dashboard-right-sidebar">
+              
+              <!-- Card A: Green Promo Card (Matches Screenshot "Khusus untuk Pengguna Baru!") -->
+              <div class="promo-green-card">
+                <h3 class="promo-title">Khusus untuk Anda!</h3>
+                <p class="promo-desc">Catat keuangan pribadi lebih santai dengan <strong>Google Gemini Flash AI</strong>. Ekstraksi instan dalam hitungan milidetik.</p>
+                <button class="promo-btn" onclick="UI.switchTab('chat')">
+                  Mulai Chat AI Sekarang →
+                </button>
+                <div class="promo-dots">
+                  <div class="promo-dot active"></div>
+                  <div class="promo-dot"></div>
+                  <div class="promo-dot"></div>
+                </div>
+              </div>
+
+              <!-- Card B: Keamanan & Privasi Data Lokal -->
+              <div class="playstore-app-card">
+                <div class="playstore-icon-box">🔒</div>
+                <div class="playstore-meta">
+                  <h4 class="playstore-title">Keamanan & Privasi Terjamin</h4>
+                  <p class="playstore-sub">Seluruh data keuangan tersimpan aman di perangkat lokal dengan enkripsi IndexedDB dan proteksi privasi penuh.</p>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </section>
+
+        <!-- =========================================
+             TAB 2: CHAT AI COPILOT
+             ========================================= -->
+        <section class="tab-pane" id="tab-chat">
+          <div class="chat-view-container">
+            <div class="chat-view-header">
+              <div class="chat-header-title-box">
+                <div class="chat-ai-avatar">🤖</div>
+                <div>
+                  <h3 style="font-size: 15px; font-weight: 700; color: var(--text-heading);">CatatDuit AI Copilot</h3>
+                  <span style="font-size: 12px; color: var(--text-muted);">Ketik percakapan alami sehari-hari • Gemini 2.0 Flash Lite Multi-Tier</span>
+                </div>
+              </div>
+              <div class="plan-badge" style="background: var(--color-income-light); color: var(--color-income); border-color: var(--color-income-border);">
+                ⚡ Cascade Failover Active
+              </div>
+            </div>
+
+            <!-- Chat Messages Container -->
+            <div class="chat-feed-scroll" id="chatMessagesContainer">
+              <!-- Dynamically populated via ui.js -->
+            </div>
+
+            <!-- Quick Action Chips -->
+            <div class="chat-input-bar-container">
+              <div class="chat-quick-chips-row" id="quickActionsBar">
+                <!-- Dynamically populated via ui.js -->
+              </div>
+
+              <!-- Chat Input Bar -->
+              <div class="chat-input-form">
+                <input 
+                  type="text" 
+                  id="chatInputField" 
+                  class="chat-text-input" 
+                  placeholder="Ketik transaksi, misal: 'beli esteh 2 seharga 5k' atau 'gajian 5.5jt'..."
+                  autocomplete="off"
+                />
+                <button class="chat-send-action-btn" id="chatSendBtn" title="Kirim Pesan (Enter)">
+                  ➤
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- =========================================
+             TAB 3: PEMASUKAN (CASH IN)
+             ========================================= -->
+        <section class="tab-pane" id="tab-income">
+          <div class="table-page-card">
+            <div class="table-toolbar-row">
+              <div class="toolbar-filter-group">
+                <div class="search-input-box">
+                  <span class="search-icon-pos">🔍</span>
+                  <input type="text" id="incomeSearchInput" placeholder="Cari keterangan pemasukan..." />
+                </div>
+                <select id="incomeCategoryFilter" class="select-filter">
+                  <option value="all">Semua Kategori</option>
+                </select>
+                <select id="incomeSortSelect" class="select-filter">
+                  <option value="date-desc">Terbaru</option>
+                  <option value="date-asc">Terlama</option>
+                  <option value="amount-desc">Nominal Terbesar</option>
+                  <option value="amount-asc">Nominal Terkecil</option>
+                </select>
+              </div>
+              <button class="btn-primary-action" onclick="UI.openTransactionModal('add', null, 'income')">
+                <span>➕</span> Tambah Pemasukan
+              </button>
+            </div>
+
+            <div class="data-table-container">
+              <table class="paper-data-table">
+                <thead>
+                  <tr>
+                    <th>Tanggal</th>
+                    <th>Keterangan</th>
+                    <th>Kategori</th>
+                    <th>Status</th>
+                    <th style="text-align: right;">Nominal (Rp)</th>
+                    <th style="text-align: center;">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="incomeTableBody">
+                  <!-- Populated via ui.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- =========================================
+             TAB 4: PENGELUARAN (CASH OUT)
+             ========================================= -->
+        <section class="tab-pane" id="tab-expense">
+          <div class="table-page-card">
+            <div class="table-toolbar-row">
+              <div class="toolbar-filter-group">
+                <div class="search-input-box">
+                  <span class="search-icon-pos">🔍</span>
+                  <input type="text" id="expenseSearchInput" placeholder="Cari keterangan pengeluaran..." />
+                </div>
+                <select id="expenseCategoryFilter" class="select-filter">
+                  <option value="all">Semua Kategori</option>
+                </select>
+                <select id="expenseSortSelect" class="select-filter">
+                  <option value="date-desc">Terbaru</option>
+                  <option value="date-asc">Terlama</option>
+                  <option value="amount-desc">Nominal Terbesar</option>
+                  <option value="amount-asc">Nominal Terkecil</option>
+                </select>
+              </div>
+              <button class="btn-primary-action" onclick="UI.openTransactionModal('add', null, 'expense')">
+                <span>➕</span> Tambah Pengeluaran
+              </button>
+            </div>
+
+            <div class="data-table-container">
+              <table class="paper-data-table">
+                <thead>
+                  <tr>
+                    <th>Tanggal</th>
+                    <th>Keterangan</th>
+                    <th>Kategori</th>
+                    <th>Status</th>
+                    <th style="text-align: right;">Nominal (Rp)</th>
+                    <th style="text-align: center;">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="expenseTableBody">
+                  <!-- Populated via ui.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- =========================================
+             TAB 5: LAPORAN & STATISTIK
+             ========================================= -->
+        <section class="tab-pane" id="tab-stats">
+          
+          <!-- Period Selector Bar -->
+          <div style="display: flex; gap: 8px; margin-bottom: 20px; overflow-x: auto;">
+            <button class="stats-period-pill header-action-btn active" data-period="all">Semua Riwayat</button>
+            <button class="stats-period-pill header-action-btn" data-period="month">Bulan Ini</button>
+            <button class="stats-period-pill header-action-btn" data-period="week">7 Hari Terakhir</button>
+          </div>
+
+          <!-- Charts Grid (Clean SVG without any element overlapping) -->
+          <div class="stats-charts-grid">
+            <!-- Chart 1: Donut Breakdown Kategori -->
+            <div class="chart-card-box">
+              <div class="chart-card-header">
+                <h3 class="chart-card-title">🍩 Breakdown Kategori Pengeluaran</h3>
+              </div>
+              <div id="donutChartBox" style="min-height: 280px;"></div>
+            </div>
+
+            <!-- Chart 2: Grouped Bar Pemasukan vs Pengeluaran -->
+            <div class="chart-card-box">
+              <div class="chart-card-header">
+                <h3 class="chart-card-title">📊 Perbandingan Arus Kas (Masuk vs Keluar)</h3>
+              </div>
+              <div id="barChartBox" style="min-height: 280px;"></div>
+            </div>
+          </div>
+
+          <!-- Chart 3: Tren Harian Pengeluaran -->
+          <div class="chart-card-box">
+            <div class="chart-card-header">
+              <h3 class="chart-card-title">📈 Tren Harian Pengeluaran (14 Hari Terakhir)</h3>
+            </div>
+            <div id="trendChartBox" style="min-height: 280px;"></div>
+          </div>
+
+        </section>
+
+        <!-- =========================================
+             TAB 6: PENGATURAN & KATEGORI
+             ========================================= -->
+        <section class="tab-pane" id="tab-settings">
+          <div class="settings-grid-layout">
+            
+            <!-- Database Cloud & Vercel Postgres -->
+            <div class="settings-card-wrapper" id="databaseStatusCard">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h3 class="settings-card-title" style="margin-bottom: 0;">
+                  <span>🗄️</span> Database Cloud & Vercel Postgres
+                </h3>
+                <span class="plan-badge" id="dbStatusBadge" style="background: var(--color-income-light); color: var(--color-income);">
+                  🟢 Memeriksa...
+                </span>
+              </div>
+              <p id="dbStatusDescription" style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+                Mendeteksi status koneksi database backend...
+              </p>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;">
+                <div style="flex: 1; min-width: 140px; background: var(--bg-surface); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-light);">
+                  <div style="font-size: 11px; color: var(--text-muted);">Engine Database</div>
+                  <div id="dbEngineText" style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-top: 2px;">-</div>
+                </div>
+                <div style="flex: 1; min-width: 140px; background: var(--bg-surface); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-light);">
+                  <div style="font-size: 11px; color: var(--text-muted);">Status Sinkronisasi</div>
+                  <div id="dbSyncStatsText" style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-top: 2px;">Tersinkron</div>
+                </div>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="header-action-btn" id="checkDbStatusBtn" onclick="UI.refreshDbStatus()">
+                  ⚡ Periksa Koneksi DB
+                </button>
+                <button class="btn-primary-action" id="syncToCloudBtn" onclick="UI.syncWithCloudNow()">
+                  🔄 Sinkronkan ke Cloud
+                </button>
+              </div>
+            </div>
+
+            <!-- Google AI Studio Gemini API Key -->
+            <div class="settings-card-wrapper">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h3 class="settings-card-title" style="margin-bottom: 0;">
+                  <span>🤖</span> Google AI Studio (Gemini Multi-Tier)
+                </h3>
+                <span class="plan-badge" id="geminiConnectionBadge" style="background: var(--color-income-light); color: var(--color-income);">
+                  🟢 Aktif
+                </span>
+              </div>
+              <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+                API Key aktif digunakan oleh parser cerdas untuk konversi natural language ke format JSON finansial.
+              </p>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <input 
+                  type="password" 
+                  id="geminiApiKeyInput" 
+                  class="input-text-box" 
+                  style="flex: 1; min-width: 220px; font-family: var(--font-mono); font-size: 12px;" 
+                  placeholder="AIzaSy... (atau kosongkan untuk menggunakan server key)"
+                />
+                <button class="btn-primary-action" onclick="UI.saveGeminiApiKey()">
+                  💾 Simpan
+                </button>
+                <button class="header-action-btn" id="testGeminiBtn" onclick="UI.testGeminiConnection()">
+                  ⚡ Test Koneksi
+                </button>
+              </div>
+              <div id="geminiTestResultBox" style="display: none; margin-top: 10px; font-size: 12px; padding: 8px 12px; border-radius: var(--radius-md);"></div>
+            </div>
+
+            <!-- Offline-First Simulation & Theme -->
+            <div class="settings-card-wrapper">
+              <h3 class="settings-card-title">
+                <span>📶</span> Mode Offline & Sinkronisasi Otomatis
+              </h3>
+              <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+                Simulasi jaringan offline (tanpa sinyal). Saat aktif, transaksi disimpan ke antrean lokal (IndexedDB) dan disinkronkan otomatis saat kembali online.
+              </p>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-light);">
+                <span style="font-size: 13px; font-weight: 600;">Simulasi Mode Offline</span>
+                <input type="checkbox" id="offlineModeSwitch" style="transform: scale(1.3); cursor: pointer;" />
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
+                <span style="font-size: 13px; font-weight: 600;">Mode Gelap (Dark Mode)</span>
+                <input type="checkbox" id="darkModeSwitch" style="transform: scale(1.3); cursor: pointer;" />
+              </div>
+            </div>
+
+            <!-- Kelola Kategori -->
+            <div class="settings-card-wrapper">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 class="settings-card-title" style="margin-bottom: 0;">
+                  <span>🏷️</span> Kelola Kategori
+                </h3>
+                <button class="header-action-btn" id="openAddCategoryModalBtn" onclick="UI.openAddCategoryModal()">
+                  ➕ Tambah Kategori
+                </button>
+              </div>
+              <div class="chat-quick-chips-row" id="settingsCategoriesCloud" style="flex-wrap: wrap;">
+                <!-- Injected via ui.js -->
+              </div>
+            </div>
+
+            <!-- Backup & Export -->
+            <div class="settings-card-wrapper">
+              <h3 class="settings-card-title">
+                <span>💾</span> Ekspor & Backup Data
+              </h3>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="header-action-btn" onclick="exportDataCSV()">
+                  📥 Download CSV
+                </button>
+                <button class="header-action-btn" onclick="exportDataJSON()">
+                  📄 Backup JSON
+                </button>
+                <button class="header-action-btn" onclick="loadSampleData()">
+                  🎲 Muat Contoh Data
+                </button>
+                <button class="header-action-btn" style="color: var(--color-expense);" onclick="resetAllData()">
+                  🗑️ Hapus Semua Data
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </main>
+
+      <!-- Floating Action Button (Paper.id Quick Bantuan / Chat AI) -->
+      <button class="floating-chat-fab" onclick="UI.switchTab('chat')" title="Buka Asisten AI CatatDuit">
+        <span>💬</span> Chat AI Asisten
+      </button>
+
+      <!-- MOBILE STICKY BOTTOM NAVIGATION BAR -->
+      <nav class="mobile-bottom-nav">
+        <button class="mobile-nav-btn active" data-tab="dashboard">
+          <span class="nav-icon">📊</span>
+          <span>Home</span>
+        </button>
+        <button class="mobile-nav-btn" data-tab="chat">
+          <span class="nav-icon">🤖</span>
+          <span>Chat AI</span>
+        </button>
+        <button class="mobile-nav-btn" data-tab="income">
+          <span class="nav-icon">💰</span>
+          <span>Masuk</span>
+        </button>
+        <button class="mobile-nav-btn" data-tab="expense">
+          <span class="nav-icon">💸</span>
+          <span>Keluar</span>
+        </button>
+        <button class="mobile-nav-btn" data-tab="stats">
+          <span class="nav-icon">📈</span>
+          <span>Grafik</span>
+        </button>
+      </nav>
+
+    </div>
+
+  </div>
+
+  <!-- =========================================
+       MODAL: ADD / EDIT TRANSACTION
+       ========================================= -->
+  <div class="modal-overlay" id="transactionModal">
+    <div class="modal-dialog-box">
+      <div class="modal-head">
+        <h3 style="font-size: 16px; font-weight: 700; color: var(--text-heading);" id="txModalTitle">Catat Transaksi</h3>
+        <button style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted);" onclick="UI.closeTransactionModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-field-group">
+          <label class="form-field-label">Tipe Transaksi</label>
+          <select id="txModalType" class="select-box">
+            <option value="expense">💸 Pengeluaran (Cash Out)</option>
+            <option value="income">💰 Pemasukan (Cash In)</option>
+          </select>
+        </div>
+
+        <div class="form-field-group">
+          <label class="form-field-label">Nominal (Rupiah)</label>
+          <input type="number" id="txModalAmount" class="input-text-box" placeholder="Contoh: 50000" min="1" />
+        </div>
+
+        <div class="form-field-group">
+          <label class="form-field-label">Kategori</label>
+          <select id="txModalCategory" class="select-box"></select>
+        </div>
+
+        <div class="form-field-group">
+          <label class="form-field-label">Keterangan / Catatan</label>
+          <input type="text" id="txModalDesc" class="input-text-box" placeholder="Contoh: Beli Nasi Goreng Spesial" />
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-field-group">
+            <label class="form-field-label">Tanggal Transaksi</label>
+            <input type="date" id="txModalDate" class="input-text-box" />
+          </div>
+          <div class="form-field-group">
+            <label class="form-field-label">Jam & Menit (WIB)</label>
+            <input type="time" id="txModalTime" class="input-text-box" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="header-action-btn" onclick="UI.closeTransactionModal()">Batal</button>
+        <button class="btn-primary-action" onclick="UI.saveTransactionFromModal()">Simpan Transaksi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================
+       MODAL: ADD CUSTOM CATEGORY
+       ========================================= -->
+  <div class="modal-overlay" id="categoryModal">
+    <div class="modal-dialog-box">
+      <div class="modal-head">
+        <h3 style="font-size: 16px; font-weight: 700; color: var(--text-heading);">Tambah Kategori Baru</h3>
+        <button style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted);" onclick="closeAddCategoryModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-field-group">
+          <label class="form-field-label">Nama Kategori</label>
+          <input type="text" id="newCatName" class="input-text-box" placeholder="Contoh: Belanja Online / Investasi" />
+        </div>
+
+        <div class="form-field-group">
+          <label class="form-field-label">Tipe</label>
+          <select id="newCatType" class="select-box">
+            <option value="expense">Pengeluaran</option>
+            <option value="income">Pemasukan</option>
+          </select>
+        </div>
+
+        <div class="form-field-group">
+          <label class="form-field-label">Emoji Icon</label>
+          <input type="text" id="newCatIcon" class="input-text-box" placeholder="Contoh: 🧴, ☕, 🎟️" maxlength="4" />
+        </div>
+
+        <div class="form-field-group">
+          <label class="form-field-label">Warna Aksen</label>
+          <input type="color" id="newCatColor" class="input-text-box" value="#1366d9" style="height: 42px; padding: 4px;" />
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="header-action-btn" onclick="closeAddCategoryModal()">Batal</button>
+        <button class="btn-primary-action" id="saveCategoryBtn">Simpan Kategori</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-shelf" id="toastContainer"></div>
+
+  <!-- JavaScript Modules -->
+  <script src="js/sample-data.js?v=3.0"></script>
+  <script src="js/parser.js?v=3.0"></script>
+  <script src="js/store.js?v=3.0"></script>
+  <script src="js/charts.js?v=3.0"></script>
+  <script src="js/ui.js?v=3.0"></script>
+  <script src="js/app.js?v=3.0"></script>
+
+</body>
+</html>

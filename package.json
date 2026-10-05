@@ -1,0 +1,27 @@
+{
+  "name": "catatduit-frontend",
+  "version": "1.0.0",
+  "description": "Frontend CatatDuit - Pencatatan Keuangan Pribadi Berbasis AI Chatbot",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "test": "node test-backend.js",
+    "test:backend": "node test-backend.js",
+    "test:vercel": "node test-vercel-readiness.js",
+    "test:gemini": "node test-gemini.js"
+  },
+  "keywords": [
+    "finance",
+    "indonesia",
+    "chatbot",
+    "ai",
+    "money-tracker",
+    "frontend"
+  ],
+  "author": "CatatDuit Team",
+  "license": "MIT",
+  "dependencies": {
+    "pg": "^8.23.1"
+  }
+}
