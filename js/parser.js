@@ -331,7 +331,10 @@ Kembalikan HANYA format JSON valid:
    * Call server endpoint /api/parse as secondary bridge
    */
   async callServerApiParse(text, apiKey) {
-    const res = await fetch('/api/parse', {
+    const parseUrl = (window.store && typeof window.store.apiUrl === 'function') 
+      ? window.store.apiUrl('/api/parse') 
+      : '/api/parse';
+    const res = await fetch(parseUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, apiKey })

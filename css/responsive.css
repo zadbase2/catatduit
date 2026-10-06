@@ -271,14 +271,28 @@
 
   .mobile-nav-btn .nav-icon {
     font-size: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+  }
+  .mobile-nav-btn .nav-icon svg {
+    width: 20px;
+    height: 20px;
+    stroke: currentColor;
+    stroke-width: 2;
+    display: block;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.2s ease;
   }
 
   .mobile-nav-btn.active {
     color: var(--primary-blue);
   }
 
-  .mobile-nav-btn.active .nav-icon {
-    transform: scale(1.1);
+  .mobile-nav-btn.active .nav-icon svg {
+    stroke: var(--primary-blue);
+    transform: scale(1.12);
   }
 }
 

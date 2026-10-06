@@ -103,12 +103,53 @@ class CatatDuitStore {
       localStorage.setItem(this.STORAGE_KEYS.CHAT_HISTORY, JSON.stringify(initialChat));
     }
 
-    // 6. Connect with Backend and Check DB Status
+    // 6. Connect with Backend and Run Auto-Sync if Online
     setTimeout(() => {
       this.refreshDbStatus().then(() => {
-        this.syncPendingQueue();
+        if (this.isOnline()) {
+          this.syncWithCloud();
+        }
       });
     }, 100);
+  }
+
+  // --- Network & Base URL Helpers ---
+  getApiBaseUrl() {
+    // Detect Capacitor native platform or local file/localhost protocol
+    const isCapacitorNative = !!(
+      (typeof window !== 'undefined' && window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) ||
+      (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.platform && window.Capacitor.platform !== 'web') ||
+      (typeof window !== 'undefined' && (window.location.protocol === 'capacitor:' || window.location.protocol === 'file:')) ||
+      (typeof window !== 'undefined' && window.location.hostname === 'localhost' && window.location.port === '')
+    );
+
+    if (isCapacitorNative) {
+      // Production Vercel URL for Capacitor native app
+      return 'https://catatduit-seven.vercel.app';
+    }
+
+    // For standard web browser on Vercel or dev server: use relative path
+    return '';
+  }
+
+  apiUrl(endpoint) {
+    const base = this.getApiBaseUrl();
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    return `${base}${cleanEndpoint}`;
+  }
+
+  isOnline() {
+    const settings = this.getSettings();
+    if (settings.isOfflineMode) return false;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+    return true;
+  }
+
+  generateTransactionId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return 'tx-' + Date.now() + '-' + crypto.randomUUID().slice(0, 8);
+    }
+    return 'tx-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
   }
 
   // Reactive listener subscription
@@ -126,21 +167,23 @@ class CatatDuitStore {
   // --- Backend / DB Cloud Health ---
   async refreshDbStatus() {
     try {
-      const res = await fetch('/api/db-status');
+      const res = await fetch(this.apiUrl('/api/db-status'));
       if (res.ok) {
         const data = await res.json();
         this.dbStatus = data;
       } else {
         this.dbStatus = {
           connected: false,
+          isCloudDb: false,
           provider: 'offline',
           engine: 'Tidak dapat terhubung ke server',
-          message: 'Server backend tidak merespons.'
+          message: 'Server backend merespons dengan kesalahan.'
         };
       }
     } catch (err) {
       this.dbStatus = {
         connected: false,
+        isCloudDb: false,
         provider: 'offline',
         engine: 'Koneksi Offline',
         message: err.message
@@ -150,65 +193,99 @@ class CatatDuitStore {
     return this.dbStatus;
   }
 
+  // Pull transactions from PostgreSQL (SOURCE OF TRUTH)
+  async pullFromCloud() {
+    if (!this.isOnline()) return false;
+
+    try {
+      const res = await fetch(this.apiUrl('/api/transactions?limit=500'));
+      if (!res.ok) return false;
+
+      const data = await res.json();
+      const serverTxs = data.transactions || [];
+      const localTxs = this.getTransactions();
+      const pendingQueue = this.getPendingQueue();
+      const pendingIds = new Set(pendingQueue.map(item => item.id || item.data?.id));
+
+      // PostgreSQL as SOURCE OF TRUTH:
+      const resultMap = new Map();
+
+      // 1. Populate all server transactions (verified in PostgreSQL)
+      serverTxs.forEach(st => {
+        resultMap.set(st.id, {
+          ...st,
+          amount: Number(st.amount),
+          sync_status: 'synced'
+        });
+      });
+
+      // 2. Retain local transactions that are still in pending queue
+      localTxs.forEach(lt => {
+        if (lt.sync_status === 'pending' || pendingIds.has(lt.id)) {
+          resultMap.set(lt.id, lt);
+        }
+      });
+
+      // 3. Transactions deleted on server will naturally be absent from resultMap
+      const merged = Array.from(resultMap.values());
+      merged.sort((a, b) => new Date(b.transaction_date || b.created_at) - new Date(a.transaction_date || a.created_at));
+
+      this.saveTransactions(merged);
+      return true;
+    } catch (err) {
+      console.warn('pullFromCloud network error:', err.message);
+      return false;
+    }
+  }
+
+  async pullCategoriesFromCloud() {
+    if (!this.isOnline()) return false;
+    try {
+      const catRes = await fetch(this.apiUrl('/api/categories'));
+      if (catRes.ok) {
+        const catData = await catRes.json();
+        if (catData.categories && catData.categories.length > 0) {
+          this.saveCategories(catData.categories);
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn('pullCategoriesFromCloud error:', err.message);
+    }
+    return false;
+  }
+
   async syncWithCloud() {
     const settings = this.getSettings();
     if (settings.isOfflineMode) {
       return { success: false, message: 'Aplikasi sedang dalam Mode Offline (Simulasi).' };
     }
+    if (!this.isOnline()) {
+      return { success: false, message: 'Tidak ada koneksi internet. Data tersimpan aman di perangkat.' };
+    }
 
     try {
-      // 1. Flush any pending queue
-      const pending = this.getPendingQueue();
-      if (pending.length > 0) {
-        const syncRes = await fetch('/api/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: pending })
-        });
-        if (syncRes.ok) {
-          localStorage.setItem(this.STORAGE_KEYS.PENDING_QUEUE, JSON.stringify([]));
-        }
-      }
+      // 1. Push any pending queue to PostgreSQL (Idempotent Batch Sync)
+      const queueResult = await this.syncPendingQueue();
 
-      // 2. Pull transactions from backend
-      const txRes = await fetch('/api/transactions?limit=250');
-      if (txRes.ok) {
-        const txData = await txRes.json();
-        if (txData.transactions && txData.transactions.length > 0) {
-          // Merge local and cloud transactions by ID
-          const localTxs = this.getTransactions();
-          const txMap = new Map();
-          localTxs.forEach(t => txMap.set(t.id, t));
-          txData.transactions.forEach(t => txMap.set(t.id, { ...t, sync_status: 'synced' }));
+      // 2. Pull latest transactions from PostgreSQL (Source of Truth)
+      await this.pullFromCloud();
 
-          const merged = Array.from(txMap.values());
-          merged.sort((a, b) => new Date(b.transaction_date || b.created_at) - new Date(a.transaction_date || a.created_at));
-          this.saveTransactions(merged);
-        } else {
-          // If cloud is empty but local has data, upload local transactions
-          const localTxs = this.getTransactions();
-          if (localTxs.length > 0) {
-            const batch = localTxs.map(t => ({ action: 'CREATE', data: t }));
-            await fetch('/api/sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ items: batch })
-            });
-          }
-        }
-      }
+      // 3. Pull latest categories from PostgreSQL
+      await this.pullCategoriesFromCloud();
 
-      // 3. Pull categories from backend
-      const catRes = await fetch('/api/categories');
-      if (catRes.ok) {
-        const catData = await catRes.json();
-        if (catData.categories && catData.categories.length > 0) {
-          this.saveCategories(catData.categories);
-        }
-      }
-
+      // 4. Update DB status
       await this.refreshDbStatus();
-      return { success: true, message: 'Sinkronisasi dengan Database Cloud berhasil!' };
+
+      let msg = 'Sinkronisasi dengan Database Cloud berhasil!';
+      if (queueResult.synced > 0) {
+        msg = `Berhasil menyinkronkan ${queueResult.synced} transaksi ke PostgreSQL!`;
+      }
+      if (queueResult.pending > 0) {
+        msg += ` (${queueResult.pending} item masih dalam antrean retry).`;
+      }
+
+      return { success: true, message: msg };
     } catch (err) {
       console.error('syncWithCloud error:', err);
       return { success: false, message: `Gagal sinkronisasi: ${err.message}` };
@@ -231,11 +308,11 @@ class CatatDuitStore {
 
   addTransaction(txData) {
     const txs = this.getTransactions();
-    const settings = this.getSettings();
-    const isOffline = settings.isOfflineMode;
+    const id = txData.id || this.generateTransactionId();
+    const isOnlineNow = this.isOnline();
 
     const newTx = {
-      id: 'tx-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      id,
       type: txData.type,
       amount: Number(txData.amount),
       category_id: txData.category_id,
@@ -243,62 +320,118 @@ class CatatDuitStore {
       category_icon: txData.category_icon || '📦',
       description: txData.description || 'Transaksi',
       raw_input: txData.raw_input || '',
-      ai_confidence: txData.ai_confidence || 0.95,
+      ai_confidence: txData.ai_confidence !== undefined ? Number(txData.ai_confidence) : 0.95,
       transaction_date: txData.transaction_date || new Date().toISOString().split('T')[0],
       transaction_time: txData.transaction_time || new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':'),
-      sync_status: isOffline ? 'pending' : 'synced',
-      created_at: new Date().toISOString()
+      sync_status: 'pending', // Pending until server explicitly acknowledges
+      created_at: txData.created_at || new Date().toISOString()
     };
 
+    // Optimistic local update
     txs.unshift(newTx);
     this.saveTransactions(txs);
 
-    if (isOffline) {
-      this.addToPendingQueue({
-        action: 'CREATE',
-        entity: 'transaction',
-        data: newTx,
-        created_at: new Date().toISOString()
-      });
-    } else {
-      // Async background sync to backend
-      fetch('/api/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTx)
-      }).catch(err => {
-        console.warn('Backend sync failed, queueing offline:', err.message);
-        this.addToPendingQueue({
-          action: 'CREATE',
-          entity: 'transaction',
-          data: newTx,
-          created_at: new Date().toISOString()
-        });
-      });
+    const queueItem = {
+      action: 'CREATE',
+      id: newTx.id,
+      data: newTx,
+      created_at: newTx.created_at
+    };
+    this.addToPendingQueue(queueItem);
+
+    // Online push
+    if (isOnlineNow) {
+      this._pushTransactionToServer(newTx);
     }
 
     return newTx;
   }
 
+  async _pushTransactionToServer(tx) {
+    try {
+      const res = await fetch(this.apiUrl('/api/transactions'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tx)
+      });
+
+      if (res.ok) {
+        const body = await res.json();
+        const serverTx = body.transaction || tx;
+
+        // Server confirmed! Update local cache with server record
+        const currentTxs = this.getTransactions();
+        const idx = currentTxs.findIndex(t => t.id === tx.id);
+        if (idx !== -1) {
+          currentTxs[idx] = { ...serverTx, sync_status: 'synced' };
+          this.saveTransactions(currentTxs);
+        }
+
+        // Remove confirmed item from pending queue
+        this.removeFromPendingQueue([tx.id]);
+        this.notify();
+      }
+    } catch (err) {
+      console.warn('Online CREATE push network notice, retained in queue:', err.message);
+    }
+  }
+
   updateTransaction(id, updatedFields) {
     const txs = this.getTransactions();
     const idx = txs.findIndex(t => t.id === id);
-    if (idx !== -1) {
-      txs[idx] = { ...txs[idx], ...updatedFields, updated_at: new Date().toISOString() };
-      this.saveTransactions(txs);
+    if (idx === -1) return null;
 
-      const settings = this.getSettings();
-      if (!settings.isOfflineMode) {
-        fetch(`/api/transactions/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedFields)
-        }).catch(err => console.warn('Update cloud sync failed:', err.message));
-      }
+    const existingTx = txs[idx];
+    const updatedTx = {
+      ...existingTx,
+      ...updatedFields,
+      sync_status: 'pending',
+      updated_at: new Date().toISOString()
+    };
 
-      return txs[idx];
+    txs[idx] = updatedTx;
+    this.saveTransactions(txs);
+
+    const queueItem = {
+      action: 'UPDATE',
+      id,
+      data: { ...updatedFields, id },
+      created_at: new Date().toISOString()
+    };
+    this.addToPendingQueue(queueItem);
+
+    if (this.isOnline()) {
+      this._pushUpdateToServer(id, updatedFields, updatedTx);
     }
-    return null;
+
+    return updatedTx;
+  }
+
+  async _pushUpdateToServer(id, updatedFields, fallbackTx) {
+    try {
+      const res = await fetch(this.apiUrl(`/api/transactions/${id}`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...updatedFields, id })
+      });
+
+      if (res.ok) {
+        const body = await res.json();
+        const serverTx = body.transaction || fallbackTx;
+
+        const currentTxs = this.getTransactions();
+        const currentIdx = currentTxs.findIndex(t => t.id === id);
+        if (currentIdx !== -1) {
+          currentTxs[currentIdx] = { ...currentTxs[currentIdx], ...serverTx, sync_status: 'synced' };
+          this.saveTransactions(currentTxs);
+        }
+
+        this.removeFromPendingQueue([id]);
+        this.notify();
+      }
+    } catch (err) {
+      console.warn('Online UPDATE push network notice, retained in queue:', err.message);
+    }
   }
 
   deleteTransaction(id) {
@@ -306,14 +439,34 @@ class CatatDuitStore {
     const filtered = txs.filter(t => t.id !== id);
     this.saveTransactions(filtered);
 
-    const settings = this.getSettings();
-    if (!settings.isOfflineMode) {
-      fetch(`/api/transactions/${id}`, {
-        method: 'DELETE'
-      }).catch(err => console.warn('Delete cloud sync failed:', err.message));
+    const queueItem = {
+      action: 'DELETE',
+      id,
+      data: { id },
+      created_at: new Date().toISOString()
+    };
+    this.addToPendingQueue(queueItem);
+
+    if (this.isOnline()) {
+      this._pushDeleteToServer(id);
     }
 
     return true;
+  }
+
+  async _pushDeleteToServer(id) {
+    try {
+      const res = await fetch(this.apiUrl(`/api/transactions/${id}`), {
+        method: 'DELETE'
+      });
+
+      if (res.ok) {
+        this.removeFromPendingQueue([id]);
+        this.notify();
+      }
+    } catch (err) {
+      console.warn('Online DELETE push network notice, retained in queue:', err.message);
+    }
   }
 
   // --- Categories ---
@@ -344,7 +497,7 @@ class CatatDuitStore {
     this.saveCategories(cats);
 
     // Sync to backend
-    fetch('/api/categories', {
+    fetch(this.apiUrl('/api/categories'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newCat)
@@ -410,7 +563,7 @@ class CatatDuitStore {
     this.saveCategories(updatedCats);
 
     // Call backend API to delete & reassign in cloud database
-    fetch(`/api/categories/${id}`, {
+    fetch(this.apiUrl(`/api/categories/${id}`), {
       method: 'DELETE'
     }).catch(err => console.warn('Delete category cloud sync failed:', err.message));
 
@@ -496,49 +649,97 @@ class CatatDuitStore {
 
   addToPendingQueue(item) {
     const queue = this.getPendingQueue();
-    queue.push(item);
+    const itemId = item.id || item.data?.id;
+
+    const existingIdx = queue.findIndex(q => (q.id || q.data?.id) === itemId);
+
+    if (existingIdx !== -1) {
+      const existing = queue[existingIdx];
+      if (existing.action === 'CREATE' && item.action === 'UPDATE') {
+        queue[existingIdx] = {
+          ...existing,
+          data: { ...existing.data, ...item.data },
+          updated_at: new Date().toISOString()
+        };
+      } else if (existing.action === 'CREATE' && item.action === 'DELETE') {
+        // Created offline, deleted offline before server ever saw it: remove completely
+        queue.splice(existingIdx, 1);
+      } else {
+        queue[existingIdx] = item;
+      }
+    } else {
+      queue.push(item);
+    }
+
     this.savePendingQueue(queue);
   }
 
-  syncPendingQueue() {
+  removeFromPendingQueue(idsToRemove) {
+    if (!idsToRemove || idsToRemove.length === 0) return;
+    const idSet = new Set(idsToRemove);
     const queue = this.getPendingQueue();
-    const txs = this.getTransactions();
-    let syncedCount = 0;
+    const remaining = queue.filter(item => !idSet.has(item.id || item.data?.id));
+    this.savePendingQueue(remaining);
+  }
 
-    txs.forEach(t => {
-      if (t.sync_status === 'pending') {
-        t.sync_status = 'synced';
-        syncedCount++;
-      }
-    });
+  async syncPendingQueue() {
+    const queue = this.getPendingQueue();
+    if (queue.length === 0) return { synced: 0, pending: 0 };
+    if (!this.isOnline()) return { synced: 0, pending: queue.length };
 
-    const history = this.getChatHistory();
-    let historyUpdated = false;
-    history.forEach(m => {
-      if (m.pending) {
-        m.pending = false;
-        m.synced = true;
-        historyUpdated = true;
-      }
-    });
-    if (historyUpdated) {
-      this.saveChatHistory(history);
-    }
-
-    if (queue.length > 0) {
-      fetch('/api/sync', {
+    try {
+      const res = await fetch(this.apiUrl('/api/sync'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: queue })
-      }).then(() => {
-        localStorage.setItem(this.STORAGE_KEYS.PENDING_QUEUE, JSON.stringify([]));
-      }).catch(err => {
-        console.warn('Backend sync failed, queue retained:', err.message);
       });
+
+      if (res.ok) {
+        const result = await res.json();
+        const syncedIds = result.syncedIds || [];
+
+        if (syncedIds.length > 0) {
+          const syncedSet = new Set(syncedIds);
+
+          // Update local transactions status
+          const txs = this.getTransactions();
+          let modified = false;
+          txs.forEach(t => {
+            if (syncedSet.has(t.id)) {
+              t.sync_status = 'synced';
+              modified = true;
+            }
+          });
+          if (modified) this.saveTransactions(txs);
+
+          // Update chat history status
+          const history = this.getChatHistory();
+          let histMod = false;
+          history.forEach(m => {
+            if (m.parsedTx && syncedSet.has(m.parsedTx.id)) {
+              m.pending = false;
+              m.synced = true;
+              histMod = true;
+            }
+          });
+          if (histMod) this.saveChatHistory(history);
+
+          // Remove ONLY confirmed synced IDs (Partial Queue Resolution)
+          this.removeFromPendingQueue(syncedIds);
+        }
+
+        const remainingQueue = this.getPendingQueue();
+        return {
+          synced: syncedIds.length,
+          pending: remainingQueue.length,
+          errors: result.errors || []
+        };
+      }
+    } catch (err) {
+      console.warn('syncPendingQueue network failure, queue retained:', err.message);
     }
 
-    this.saveTransactions(txs);
-    return Math.max(syncedCount, queue.length);
+    return { synced: 0, pending: this.getPendingQueue().length };
   }
 
   // --- Analytics & Summaries ---

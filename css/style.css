@@ -266,6 +266,15 @@ a:hover {
   align-items: center;
   justify-content: center;
   width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.nav-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 2;
+  display: block;
 }
 
 .nav-badge-new {

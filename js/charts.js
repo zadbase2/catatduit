@@ -55,7 +55,9 @@ const ChartEngine = {
     if (!data || data.length === 0) {
       container.innerHTML = `
         <div class="chart-empty-state">
-          <div class="empty-icon">📊</div>
+          <div class="empty-icon">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 9 9h-9Z"/></svg>
+          </div>
           <p class="empty-title">Belum ada pengeluaran</p>
           <span class="empty-desc">Catat transaksi di tab Chat untuk melihat proporsi kategori.</span>
         </div>
@@ -116,17 +118,23 @@ const ChartEngine = {
       />
     `).join('');
 
-    const legendItems = slices.map((s, idx) => `
-      <div class="chart-legend-row" data-index="${idx}">
-        <div class="legend-indicator-dot" style="background-color: ${s.color};"></div>
-        <span class="legend-emoji-icon">${s.icon || '🏷️'}</span>
-        <div class="legend-title-box">
-          <span class="legend-cat-title" title="${this.escapeHtml(s.name)}">${this.escapeHtml(s.name)}</span>
-          <span class="legend-cat-amount">${this.formatIDR(s.total)}</span>
+    const legendItems = slices.map((s, idx) => {
+      const catIconHtml = window.UI && typeof window.UI.renderCategoryIcon === 'function'
+        ? window.UI.renderCategoryIcon(s.name, s.icon, s.color, 14)
+        : `<span class="legend-emoji-icon">${s.icon || '🏷️'}</span>`;
+
+      return `
+        <div class="chart-legend-row" data-index="${idx}">
+          <div class="legend-indicator-dot" style="background-color: ${s.color};"></div>
+          <span class="legend-category-box">${catIconHtml}</span>
+          <div class="legend-title-box">
+            <span class="legend-cat-title" title="${this.escapeHtml(s.name)}">${this.escapeHtml(s.name)}</span>
+            <span class="legend-cat-amount">${this.formatIDR(s.total)}</span>
+          </div>
+          <span class="legend-pill-percent">${s.percentage}%</span>
         </div>
-        <span class="legend-pill-percent">${s.percentage}%</span>
-      </div>
-    `).join('');
+      `;
+    }).join('');
 
     // Font size scaling for center text to prevent overflow
     const totalStr = this.formatIDR(total);

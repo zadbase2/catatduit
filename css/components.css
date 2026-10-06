@@ -47,18 +47,30 @@
 }
 
 .hero-eye-btn {
-  background: none;
-  border: none;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   color: #ffffff;
   cursor: pointer;
-  opacity: 0.85;
-  font-size: 15px;
-  padding: 2px 4px;
+  opacity: 0.9;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   transition: var(--transition);
 }
 .hero-eye-btn:hover {
   opacity: 1;
-  transform: scale(1.1);
+  background: rgba(255, 255, 255, 0.24);
+  transform: scale(1.08);
+}
+.hero-eye-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke: #ffffff;
+  display: block;
 }
 
 .hero-amount-row {
@@ -299,6 +311,14 @@
   align-items: center;
   justify-content: center;
   font-size: 20px;
+  color: var(--primary-blue);
+}
+.feature-box-icon svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 2;
+  display: block;
 }
 
 /* ─── ROW 3: TWO-COLUMN MAIN CONTENT (PaperPay In & Out + Right Sidebar) ─── */
@@ -347,13 +367,27 @@
   justify-content: center;
   font-size: 18px;
 }
+.table-badge-icon svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+  display: block;
+}
 .table-badge-icon.in {
   background: var(--color-income-light);
   border: 1px solid var(--color-income-border);
+  color: var(--color-income);
+}
+.table-badge-icon.in svg {
+  stroke: var(--color-income);
 }
 .table-badge-icon.out {
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  background: var(--color-expense-light);
+  border: 1px solid var(--color-expense-border);
+  color: var(--color-expense);
+}
+.table-badge-icon.out svg {
+  stroke: var(--color-expense);
 }
 
 .table-header-titles {
@@ -1427,4 +1461,83 @@
   background: #ef4444;
   color: #ffffff;
   transform: scale(1.12);
+}
+
+/* ─── MODERN CATEGORY SVG BADGES & ICONS ─── */
+.cat-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--bg-hover);
+  padding: 3px 8px 3px 4px;
+  border-radius: 6px;
+  color: var(--text-main);
+  border: 1px solid var(--border-light);
+  line-height: 1.2;
+  vertical-align: middle;
+}
+
+.cat-badge-name {
+  font-weight: 500;
+  color: var(--text-heading);
+  white-space: nowrap;
+}
+
+.cat-svg-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  vertical-align: middle;
+  transition: transform 0.15s ease;
+}
+
+.cat-svg-icon svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  stroke-width: 2;
+  display: block;
+}
+
+.legend-category-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.legend-category-box .cat-svg-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.legend-category-box .cat-svg-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ─── MODERN CHART TITLE ICONS ─── */
+.chart-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  vertical-align: -3px;
+  margin-right: 6px;
+  color: var(--primary-blue);
+}
+
+.chart-title-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 2;
+  display: block;
 }

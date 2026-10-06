@@ -18,6 +18,109 @@ const UI = {
   isBalanceHidden: false,
   mobileWifiUrl: 'http://192.168.100.20:3000',
 
+  ICONS: {
+    home: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
+    chatAi: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/><path d="m11 9 1 2 2 1-2 1-1 2-1-2-2-1 2-1z" fill="currentColor" fill-opacity="0.3"/></svg>`,
+    income: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6"/><path d="M9 9v6h6"/></svg>`,
+    expense: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 15l6-6"/><path d="M15 15V9H9"/></svg>`,
+    stats: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>`,
+    eye: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`,
+    eyeOff: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>`,
+    categories: {
+      food: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2v6a3 3 0 0 1-3 3 3 3 0 0 1-3-3V2"/><path d="M15 11v11"/><path d="M5 2v10a2 2 0 0 0 2 2h1v8"/><path d="M8 2v6"/></svg>`,
+      transport: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 3C2.1 11 2 11.5 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>`,
+      shopping: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
+      entertainment: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="10" y1="12" y2="12"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="15" x2="15.01" y1="13" y2="13"/><line x1="18" x2="18.01" y1="11" y2="11"/><rect width="20" height="12" x="2" y="6" rx="2"/></svg>`,
+      bills: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+      health: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/></svg>`,
+      education: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></svg>`,
+      salary: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>`,
+      freelance: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/></svg>`,
+      investment: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>`,
+      gift: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/></svg>`,
+      other: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>`
+    }
+  },
+
+  getCategoryIconSvg(nameOrIcon) {
+    if (!nameOrIcon) return this.ICONS.categories.other;
+    const key = String(nameOrIcon).toLowerCase().trim();
+
+    if (key.includes('makan') || key.includes('minum') || key === '🍔' || key === 'food' || key === 'kuliner') {
+      return this.ICONS.categories.food;
+    }
+    if (key.includes('trans') || key.includes('bensin') || key === '🚗' || key === 'transport' || key === 'kendaraan') {
+      return this.ICONS.categories.transport;
+    }
+    if (key.includes('belanja') || key.includes('shop') || key === '🛒' || key === 'shopping') {
+      return this.ICONS.categories.shopping;
+    }
+    if (key.includes('hibur') || key.includes('game') || key === '🎮' || key === 'entertainment') {
+      return this.ICONS.categories.entertainment;
+    }
+    if (key.includes('tagih') || key.includes('listrik') || key.includes('util') || key === '💡' || key === 'bills') {
+      return this.ICONS.categories.bills;
+    }
+    if (key.includes('sehat') || key.includes('obat') || key === '💊' || key === 'health') {
+      return this.ICONS.categories.health;
+    }
+    if (key.includes('didik') || key.includes('sekolah') || key.includes('kursus') || key === '📚' || key === 'education') {
+      return this.ICONS.categories.education;
+    }
+    if (key.includes('gaji') || key.includes('salary') || key === '💰' || key === 'salary') {
+      return this.ICONS.categories.salary;
+    }
+    if (key.includes('free') || key.includes('proyek') || key === '💻' || key === 'freelance') {
+      return this.ICONS.categories.freelance;
+    }
+    if (key.includes('inves') || key.includes('saham') || key.includes('kripto') || key === '📈' || key === 'investment') {
+      return this.ICONS.categories.investment;
+    }
+    if (key.includes('hadiah') || key.includes('bonus') || key === '🎁' || key === 'gift') {
+      return this.ICONS.categories.gift;
+    }
+    return this.ICONS.categories.other;
+  },
+
+  getCategoryColor(nameOrIcon, type = 'expense') {
+    const key = String(nameOrIcon || '').toLowerCase();
+    if (key.includes('makan') || key === '🍔') return '#F59E0B';
+    if (key.includes('trans') || key === '🚗') return '#3B82F6';
+    if (key.includes('belanja') || key === '🛒') return '#EC4899';
+    if (key.includes('hibur') || key === '🎮') return '#8B5CF6';
+    if (key.includes('tagih') || key === '💡') return '#EAB308';
+    if (key.includes('sehat') || key === '💊') return '#EF4444';
+    if (key.includes('didik') || key === '📚') return '#06B6D4';
+    if (key.includes('gaji') || key === '💰') return '#10B981';
+    if (key.includes('free') || key === '💻') return '#3B82F6';
+    if (key.includes('inves') || key === '📈') return '#8B5CF6';
+    if (key.includes('hadiah') || key === '🎁') return '#F43F5E';
+    return type === 'income' ? '#10B981' : '#64748B';
+  },
+
+  renderCategoryIcon(name, icon, color = null, size = 14) {
+    const svg = this.getCategoryIconSvg(icon || name);
+    const catColor = color || this.getCategoryColor(name || icon);
+    return `
+      <span class="cat-svg-icon" style="color: ${catColor}; background: ${catColor}18;">
+        ${svg}
+      </span>
+    `;
+  },
+
+  renderCategoryBadge(name, icon, type = 'expense') {
+    const catColor = this.getCategoryColor(name || icon, type);
+    const svg = this.getCategoryIconSvg(icon || name);
+    return `
+      <span class="cat-badge-pill" title="${name || 'Kategori'}">
+        <span class="cat-svg-icon" style="color: ${catColor}; background: ${catColor}20;">
+          ${svg}
+        </span>
+        <span class="cat-badge-name">${name || 'Lainnya'}</span>
+      </span>
+    `;
+  },
+
   init() {
     this.parser = new AIParser(window.store.getCategories());
     this.bindEvents();
@@ -33,7 +136,10 @@ const UI = {
 
   async loadConfigFromServer() {
     try {
-      const res = await fetch('/api/config');
+      const url = window.store && typeof window.store.apiUrl === 'function'
+        ? window.store.apiUrl('/api/config')
+        : '/api/config';
+      const res = await fetch(url);
       if (res.ok) {
         const config = await res.json();
         if (config.mobileUrl) {
@@ -278,13 +384,13 @@ const UI = {
     }
   },
 
-  // Automatic Synchronization Engine
-  autoSync() {
-    const syncedCount = window.store.syncPendingQueue();
-    if (syncedCount > 0) {
-      this.showToast(`⚡ Online terdeteksi! ${syncedCount} transaksi otomatis disinkronkan ke cloud & status pending dihapus.`, 'success');
-    } else {
-      this.showToast('🟢 Terhubung ke Online. Semua data tersinkronisasi.', 'info');
+  // Automatic Synchronization Engine (Push Pending & Pull PostgreSQL Source of Truth)
+  async autoSync() {
+    if (window.store && typeof window.store.syncWithCloud === 'function') {
+      const res = await window.store.syncWithCloud();
+      if (res && res.success && res.message) {
+        this.showToast(res.message, 'success');
+      }
     }
     this.renderAll();
   },
@@ -297,7 +403,7 @@ const UI = {
     this.isBalanceHidden = !this.isBalanceHidden;
     const btn = document.getElementById('balanceEyeBtn');
     if (btn) {
-      btn.innerHTML = this.isBalanceHidden ? '🙈' : '👁️';
+      btn.innerHTML = this.isBalanceHidden ? this.ICONS.eyeOff : this.ICONS.eye;
       btn.title = this.isBalanceHidden ? 'Tampilkan Nominal Saldo' : 'Sembunyikan Nominal Saldo';
     }
     const heroBalEl = document.getElementById('mainHeroBalance');
@@ -366,7 +472,10 @@ const UI = {
           <div class="paper-tx-item" onclick="UI.openTransactionModal('edit', '${t.id}')" title="Klik untuk edit/lihat detail">
             <div class="tx-item-left">
               <span class="tx-item-name">${t.description}</span>
-              <span class="tx-item-date">${this.formatDate(t.transaction_date, t.transaction_time)} • ${t.category_name}</span>
+              <span class="tx-item-date" style="display: flex; align-items: center; gap: 5px;">
+                ${this.renderCategoryIcon(t.category_name, t.category_icon, null, 12)}
+                <span>${this.formatDate(t.transaction_date, t.transaction_time)} • ${t.category_name}</span>
+              </span>
             </div>
             <div class="tx-item-right">
               <span class="tx-item-amount tabular-nums">${this.formatIDR(t.amount)}</span>
@@ -392,7 +501,10 @@ const UI = {
           <div class="paper-tx-item" onclick="UI.openTransactionModal('edit', '${t.id}')" title="Klik untuk edit/lihat detail">
             <div class="tx-item-left">
               <span class="tx-item-name">${t.description}</span>
-              <span class="tx-item-date">${this.formatDate(t.transaction_date, t.transaction_time)} • ${t.category_name}</span>
+              <span class="tx-item-date" style="display: flex; align-items: center; gap: 5px;">
+                ${this.renderCategoryIcon(t.category_name, t.category_icon, null, 12)}
+                <span>${this.formatDate(t.transaction_date, t.transaction_time)} • ${t.category_name}</span>
+              </span>
             </div>
             <div class="tx-item-right">
               <span class="tx-item-amount tabular-nums">${this.formatIDR(t.amount)}</span>
@@ -483,7 +595,7 @@ const UI = {
             <div class="ai-preview-card">
               <div class="ai-preview-header">
                 <span class="badge ${isInc ? 'badge-income' : 'badge-expense'}">
-                  ${isInc ? '💰 Pemasukan Terdeteksi' : '💸 Pengeluaran Terdeteksi'}
+                  ${isInc ? 'Pemasukan Terdeteksi' : 'Pengeluaran Terdeteksi'}
                 </span>
                 <span class="badge badge-ai">${modelBadge}</span>
               </div>
@@ -493,7 +605,7 @@ const UI = {
               <div class="ai-preview-details">
                 <div class="ai-preview-detail-item">
                   <span class="label">Kategori</span>
-                  <span class="val">${tx.category_icon} ${tx.category_name}</span>
+                  <span class="val">${this.renderCategoryBadge(tx.category_name, tx.category_icon, tx.type)}</span>
                 </div>
                 <div class="ai-preview-detail-item">
                   <span class="label">Keterangan</span>
@@ -774,9 +886,7 @@ const UI = {
           <div style="font-weight: 600; color: var(--text-heading); font-size: 13.5px;">${t.description}</div>
         </td>
         <td>
-          <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; background: var(--bg-hover); padding: 3px 8px; border-radius: 4px;">
-            ${t.category_icon || '💰'} ${t.category_name}
-          </span>
+          ${this.renderCategoryBadge(t.category_name, t.category_icon, 'income')}
         </td>
         <td>
           <span class="tx-item-status-pill ${t.sync_status === 'pending' ? 'pending' : 'success'}">
@@ -860,9 +970,7 @@ const UI = {
           <div style="font-weight: 600; color: var(--text-heading); font-size: 13.5px;">${t.description}</div>
         </td>
         <td>
-          <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; background: var(--bg-hover); padding: 3px 8px; border-radius: 4px;">
-            ${t.category_icon || '💸'} ${t.category_name}
-          </span>
+          ${this.renderCategoryBadge(t.category_name, t.category_icon, 'expense')}
         </td>
         <td>
           <span class="tx-item-status-pill ${t.sync_status === 'pending' ? 'pending' : 'neutral'}">
@@ -1023,7 +1131,7 @@ const UI = {
         const isLainnya = (c.name || '').toLowerCase() === 'lainnya';
         return `
           <div class="cat-manage-pill">
-            <span>${c.icon || '🏷️'}</span>
+            ${this.renderCategoryIcon(c.name, c.icon, c.color)}
             <span>${c.name}</span>
             <span style="font-size: 10px; font-weight: 700; opacity: 0.85; color: ${c.type === 'income' ? 'var(--color-income)' : 'var(--color-expense)'}">
               (${c.type === 'income' ? 'Masuk' : 'Keluar'})
@@ -1124,7 +1232,10 @@ const UI = {
 
       // 1. Try server bridge /api/test-gemini
       try {
-        const res = await fetch('/api/test-gemini', {
+        const testUrl = window.store && typeof window.store.apiUrl === 'function'
+          ? window.store.apiUrl('/api/test-gemini')
+          : '/api/test-gemini';
+        const res = await fetch(testUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ apiKey: key })
@@ -1551,6 +1662,19 @@ const UI = {
 
     window.addEventListener('offline', () => {
       this.handleNetworkStatusChange(false);
+    });
+
+    // Re-fetch latest PostgreSQL data when tab/window becomes active (Cross-device freshness)
+    window.addEventListener('focus', () => {
+      if (window.store && window.store.isOnline && window.store.isOnline()) {
+        window.store.pullFromCloud().then(() => this.renderAll());
+      }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && window.store && window.store.isOnline && window.store.isOnline()) {
+        window.store.pullFromCloud().then(() => this.renderAll());
+      }
     });
 
     // Automatic background check: syncs immediately if online and pending items exist

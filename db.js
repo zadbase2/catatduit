@@ -265,6 +265,7 @@ async function getDbStatus() {
 
       return {
         connected: true,
+        isCloudDb: true,
         provider: 'vercel-postgres',
         engine: 'PostgreSQL (Neon / Vercel Postgres)',
         database: ping.rows[0].db_name,
@@ -280,6 +281,7 @@ async function getDbStatus() {
     } catch (err) {
       return {
         connected: false,
+        isCloudDb: false,
         provider: 'vercel-postgres',
         error: err.message,
         message: 'Koneksi PostgreSQL terputus.'
@@ -289,7 +291,8 @@ async function getDbStatus() {
 
   const store = getLocalStore();
   return {
-    connected: true,
+    connected: false,
+    isCloudDb: false,
     provider: 'local-fallback',
     engine: 'CatatDuit Local JSON / Memory Store',
     stats: {
@@ -297,7 +300,7 @@ async function getDbStatus() {
       categories: store.categories.length,
       transactions: store.transactions.length
     },
-    message: 'Berjalan dalam mode lokal offline. Untuk menghubungkan ke Vercel Postgres, isi POSTGRES_URL di .env atau dashboard Vercel.'
+    message: 'Perhatian: Berjalan dalam mode lokal offline. Untuk menghubungkan ke Vercel Postgres, isi POSTGRES_URL di .env atau dashboard Vercel.'
   };
 }
 
@@ -686,45 +689,60 @@ async function deleteTransaction(id, userId = DEFAULT_USER.id) {
   await initDatabase();
 
   if (usePostgres && pool) {
-    const res = await pool.query('DELETE FROM transactions WHERE id = $1 AND user_id = $2 RETURNING id', [id, userId]);
-    return res.rows.length > 0;
+    await pool.query('DELETE FROM transactions WHERE id = $1 AND user_id = $2', [id, userId]);
+    // Idempotent delete: return true regardless of whether 1 row was deleted or already absent
+    return true;
   }
 
   // Local fallback
   const store = getLocalStore();
-  const initLen = store.transactions.length;
   store.transactions = store.transactions.filter(t => t.id !== id);
-  const deleted = store.transactions.length < initLen;
-  if (deleted) saveLocalStore(store);
-  return deleted;
+  saveLocalStore(store);
+  return true;
 }
 
 /**
  * Batch Sync handler for offline pending queue
- * Accepts array of queue actions: [{ action: 'CREATE'|'UPDATE'|'DELETE', data: {...} }]
+ * Accepts array of queue actions: [{ action: 'CREATE'|'UPDATE'|'DELETE', id: '...', data: {...} }]
+ * Returns { total, synced, syncedIds, errors } so client can perform partial queue resolution.
  */
 async function batchSync(queueItems = [], userId = DEFAULT_USER.id) {
   await initDatabase();
   const results = {
     total: queueItems.length,
     synced: 0,
+    syncedIds: [],
     errors: []
   };
 
   for (const item of queueItems) {
+    const itemId = item.id || item.data?.id;
     try {
       if (item.action === 'CREATE') {
-        await createTransaction(item.data, userId);
+        const payload = item.data || {};
+        if (itemId && !payload.id) payload.id = itemId;
+        if (payload.amount === undefined || payload.amount === null || !payload.type) {
+          throw new Error('Nominal dan jenis transaksi wajib diisi.');
+        }
+        await createTransaction(payload, userId);
         results.synced++;
+        if (itemId) results.syncedIds.push(itemId);
       } else if (item.action === 'UPDATE') {
-        await updateTransaction(item.data.id, item.data, userId);
+        const payload = item.data || {};
+        const updated = await updateTransaction(itemId, payload, userId);
+        if (!updated && payload.amount && payload.type) {
+          // If record wasn't on server yet, create it idempotently
+          await createTransaction({ ...payload, id: itemId }, userId);
+        }
         results.synced++;
+        if (itemId) results.syncedIds.push(itemId);
       } else if (item.action === 'DELETE') {
-        await deleteTransaction(item.data.id, userId);
+        await deleteTransaction(itemId, userId);
         results.synced++;
+        if (itemId) results.syncedIds.push(itemId);
       }
     } catch (err) {
-      results.errors.push({ id: item.data?.id, error: err.message });
+      results.errors.push({ id: itemId, error: err.message });
     }
   }
 

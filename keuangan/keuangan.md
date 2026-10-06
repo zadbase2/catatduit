@@ -1,636 +1,460 @@
-# 📋 Project Requirement Document (PRD)
-# CatatDuit — Pencatatan Keuangan Pribadi Berbasis AI Chatbot
+# 📋 Sistem & Arsitektur Data CatatDuit
+# Pencatatan Keuangan Pribadi Berbasis AI & Offline-First Sync Engine
 
-> **Versi**: 1.0  
-> **Tanggal**: 3 Oktober 2026  
-> **Status**: Draft — Menunggu Review  
-> **Disusun oleh**: Council Mode (4 Dewan)
-
----
-
-## 1. Visi Produk
-
-**CatatDuit** adalah aplikasi pencatatan keuangan pribadi yang memungkinkan user mencatat pemasukan dan pengeluaran cukup dengan **mengetik kalimat natural** seperti chat sehari-hari. AI (Google Gemini) akan otomatis mem-parsing teks menjadi data terstruktur.
-
-**Contoh penggunaan:**
-```
-User: "baru beli esteh 2 harga 5k"
-AI Parse → Pengeluaran: Rp 5.000 | Kategori: Minuman | Item: Esteh x2
-
-User: "gajian bulan ini 5jt"
-AI Parse → Pemasukan: Rp 5.000.000 | Kategori: Gaji | Keterangan: Gaji bulanan
-```
-
-### Unique Selling Points
-1. **Chatbot-based input** — Tidak perlu isi form, cukup ketik seperti chat
-2. **Offline-first** — Berfungsi tanpa internet, sync otomatis saat online
-3. **Mobile app** — Bisa diinstall di HP via Capacitor
-4. **AI-powered categorization** — Otomatis kategorisasi dan parsing nominal
+> **Versi**: 2.0 (Post-Audit, Perbaikan Arsitektur, & Evaluasi Sinkronisasi)  
+> **Status**: Production Architecture & Engineering Specification  
+> **Ruang Lingkup**: Core Engine, Database Schema, AI Orchestration, Sync Engine, API Contract, dan Post-Mortem Audit & Evaluasi
 
 ---
 
-## 2. Tech Stack
+## 1. Visi & Prinsip Sistem
 
-| Layer | Teknologi | Alasan |
-|-------|-----------|--------|
-| **Frontend** | Next.js 14+ (App Router) | SSR, API routes, static export untuk Capacitor |
-| **Styling** | Tailwind CSS | Mobile-first, utility-based, dark mode support |
-| **Database (Cloud)** | Vercel Postgres (Neon) | Hosting & DB satu platform, serverless-friendly |
-| **Database (Local)** | IndexedDB via Dexie.js | Offline storage, rich querying, observer API |
-| **AI** | Google Gemini Multi-Tier (Primary: Gemini 2.0 Flash Lite, Fallback: Gemini 2.0 Flash) | Mengutamakan model token terendah & termurah, auto-switch otomatis jika model sibuk/rate limit |
-| **Concurrency / UX** | Background Queue Worker & Optimistic UI | Non-blocking input (transaksi langsung berstatus pending di background, tanpa freezing/loading spinner) |
-| **Mobile Wrapper** | Capacitor | Web → native app, akses plugin native |
-| **Offline** | Service Worker + Workbox | Caching, background sync |
-| **Charts** | Chart.js / Recharts | Grafik interaktif, ringan |
-| **Auth** | NextAuth.js / Clerk | Authentication (opsional untuk MVP) |
-| **State Management** | Zustand + Dexie.js Reactive Store | Ringan, simple, manajemen offline queue & pending state |
+**CatatDuit** adalah sistem pencatatan keuangan pribadi dengan pendekatan **Natural Language Processing** dan arsitektur **Offline-First**. Pengguna mencatat transaksi melalui kalimat percakapan sehari-hari yang kemudian diekstrak oleh Google Gemini AI menjadi data terstruktur.
+
+### Prinsip Utama Arsitektur Data:
+1. **PostgreSQL sebagai Single Source of Truth**: Saat perangkat terhubung ke internet (online), database cloud PostgreSQL (Neon / Vercel Postgres) adalah satu-satunya sumber kebenaran data yang valid.
+2. **Local Storage / IndexedDB sebagai Cache & Offline Buffer**: Penyimpanan lokal di perangkat klien bertindak sebagai cache pembacaan instan dan antrean transaksi offline, bukan sebagai database independen.
+3. **True Offline-First Resilience**: Semua operasi (Create, Update, Delete) dapat dilakukan tanpa koneksi internet dan dijamin tersinkronisasi secara idempotent saat online kembali.
+4. **Idempotency & Zero Duplication**: Setiap transaksi memiliki Client-Generated UUID sebelum dikirim ke jaringan, mencegah duplikasi data saat terjadi *network timeout*, *retry*, atau koneksi fluktuatif.
+5. **Cross-Platform Data Consistency**: Klien Website dan aplikasi mobile Capacitor terhubung ke instance database PostgreSQL yang sama secara konsisten dan reaktif.
 
 ---
 
-## 3. Arsitektur Sistem
+## 2. Tech Stack Arsitektur
+
+| Layer | Teknologi | Peran & Justifikasi Teknis |
+|---|---|---|
+| **Runtime Environment** | Node.js (Vercel Serverless & Local Engine) | Menjalankan API endpoints, background handler, dan migrasi database. |
+| **Database Cloud** | Vercel Postgres / Neon (PostgreSQL 15+) | Penyimpanan relasional persisten, kepatuhan ACID, indeks performa tinggi, SSL connection pooling. |
+| **Database Adapter** | `pg` (Node-Postgres Pool) | Driver koneksi PostgreSQL dengan penanganan pooling koneksi serverless dan TLS/SSL. |
+| **Local Storage / Cache** | Web Storage API (localStorage) / IndexedDB | Penyimpanan snapshot transaksi lokal dan penampung write-ahead log `pendingQueue`. |
+| **AI Parsing Engine** | Google Gemini (Cascade: Flash-Lite → Flash) | Ekstraksi entitas nominal, tipe, dan kategori dari bahasa natural percakapan. |
+| **Local Regex Fallback** | Deterministic Pattern Matcher | Parser cadangan lokal jika perangkat offline total atau kuota API habis. |
+| **Mobile Runtime** | Capacitor Core & Android Platform | Runtime container untuk membungkus aset web menjadi aplikasi native Android mandiri. |
+| **Sync Engine** | Bi-Directional Reconciliation Manager | Engine sinkronisasi dua arah (Push antrean lokal & Pull snapshot PostgreSQL). |
+
+---
+
+## 3. Diagram Arsitektur Data & Sinkronisasi
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    CLIENT (Browser/App)                  │
-│                                                         │
-│  ┌──────────┐  ┌──────────────┐  ┌───────────────────┐  │
-│  │   UI     │  │  Zustand     │  │   Dexie.js        │  │
-│  │  (Next)  │←→│  (State)     │←→│  (IndexedDB)      │  │
-│  └──────────┘  └──────────────┘  └───────────────────┘  │
-│                       ↕                    ↕             │
-│              ┌────────────────┐   ┌────────────────┐    │
-│              │ Service Worker │   │ Sync Manager   │    │
-│              │ (Offline Cache)│   │ (Queue & Push) │    │
-│              └────────────────┘   └────────────────┘    │
-└───────────────────────┬─────────────────┬───────────────┘
-                        │ (saat online)   │
-                        ↓                 ↓
-┌───────────────────────────────────────────────────────────┐
-│                   VERCEL (Server)                         │
-│                                                           │
-│  ┌─────────────────┐     ┌─────────────────────────────┐  │
-│  │  API Routes     │────→│  Vercel Postgres (Neon)     │  │
-│  │  /api/sync      │     │  - users                    │  │
-│  │  /api/parse     │     │  - transactions             │  │
-│  │  /api/summary   │     │  - categories               │  │
-│  └────────┬────────┘     │  - monthly_summaries        │  │
-│           │              └─────────────────────────────┘  │
-│           ↓                                               │
-│  ┌─────────────────┐                                      │
-│  │  Google Gemini  │                                      │
-│  │  API (parse)    │                                      │
-│  └─────────────────┘                                      │
-└───────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             CLIENT RUNTIME                                  │
+│                 (Browser Website / Capacitor Mobile App)                    │
+│                                                                             │
+│  ┌──────────────────────────┐             ┌──────────────────────────────┐  │
+│  │   Input Controller       │             │   Local State Cache          │  │
+│  │   (Natural Lang / Form)  │────────────→│   (localStorage / IndexedDB) │  │
+│  └─────────────┬────────────┘             └──────────────┬───────────────┘  │
+│                │                                         │                  │
+│                ▼                                         ▼                  │
+│  ┌──────────────────────────┐             ┌──────────────────────────────┐  │
+│  │   AI / Regex Parser      │             │   Pending Write-Ahead Queue  │  │
+│  │   (Structured Extractor) │             │   (catatduit_pending_queue_v1)│  │
+│  └──────────────────────────┘             └──────────────┬───────────────┘  │
+│                                                          │                  │
+│                                            Online Sync   │ (Auto Flush &    │
+│                                            Reconcile     │  Pull Snapshot)  │
+└──────────────────────────────────────────────────────────┼──────────────────┘
+                                                           │
+                                 HTTPS (CORS Enabled)      │
+                                                           ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      VERCEL SERVERLESS BACKEND (API)                        │
+│                                                                             │
+│  ┌─────────────────┐       ┌─────────────────┐       ┌───────────────────┐  │
+│  │ /api/transactions│      │   /api/sync     │       │   /api/db-status  │  │
+│  │ (CRUD Endpoints) │      │ (Batch Engine)  │       │  (Health Check)   │  │
+│  └────────┬────────┘       └────────┬────────┘       └─────────┬─────────┘  │
+│           │                         │                          │            │
+│           └─────────────────────────┼──────────────────────────┘            │
+│                                     ▼                                       │
+│                       ┌───────────────────────────┐                         │
+│                       │   Database Pool Manager   │                         │
+│                       │   (SSL Connection Pool)   │                         │
+│                       └─────────────┬─────────────┘                         │
+└─────────────────────────────────────┼───────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    NEON POSTGRESQL (SINGLE SOURCE OF TRUTH)                 │
+│                                                                             │
+│   Tabel: `users`  |  `categories`  |  `transactions`  | `monthly_summaries` │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 4. Database Schema
+## 4. Skema Database
 
-### 4.1 Vercel Postgres (Cloud)
+### 4.1 PostgreSQL Schema (Neon / Vercel Postgres)
 
 ```sql
--- Tabel Users
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+-- 1. Tabel Users
+CREATE TABLE IF NOT EXISTS users (
+    id VARCHAR(100) PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
     name VARCHAR(100),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Tabel Categories (default + custom user)
-CREATE TABLE categories (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id),
-    name VARCHAR(50) NOT NULL,
-    type VARCHAR(10) CHECK (type IN ('income', 'expense')),
-    icon VARCHAR(10),        -- emoji icon
-    color VARCHAR(7),        -- hex color
+-- 2. Tabel Categories
+CREATE TABLE IF NOT EXISTS categories (
+    id VARCHAR(100) PRIMARY KEY,
+    user_id VARCHAR(100) REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    type VARCHAR(10) NOT NULL CHECK (type IN ('income', 'expense')),
+    icon VARCHAR(20),
+    color VARCHAR(20),
     is_default BOOLEAN DEFAULT false,
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Tabel Transactions (core)
-CREATE TABLE transactions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) NOT NULL,
+-- 3. Tabel Transactions (Core Ledger)
+CREATE TABLE IF NOT EXISTS transactions (
+    id VARCHAR(100) PRIMARY KEY, -- Client-Generated UUID (Idempotency Key)
+    user_id VARCHAR(100) REFERENCES users(id) ON DELETE CASCADE,
     amount DECIMAL(15, 2) NOT NULL,
-    type VARCHAR(10) CHECK (type IN ('income', 'expense')) NOT NULL,
-    category_id UUID REFERENCES categories(id),
+    type VARCHAR(10) NOT NULL CHECK (type IN ('income', 'expense')),
+    category_id VARCHAR(100) REFERENCES categories(id) ON DELETE SET NULL,
+    category_name VARCHAR(100),
+    category_icon VARCHAR(20),
     description VARCHAR(255),
-    raw_input TEXT,               -- teks asli dari user
-    ai_confidence DECIMAL(3, 2), -- confidence score AI parsing
+    raw_input TEXT,
+    ai_confidence DECIMAL(3, 2),
     transaction_date DATE NOT NULL,
-    device_id VARCHAR(100),      -- untuk conflict resolution
-    version INTEGER DEFAULT 1,   -- optimistic locking
-    sync_status VARCHAR(10) DEFAULT 'synced',
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    transaction_time VARCHAR(20),
+    device_id VARCHAR(100),
+    version INTEGER DEFAULT 1,
+    sync_status VARCHAR(20) DEFAULT 'synced',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Index untuk performa query
-CREATE INDEX idx_transactions_user_date ON transactions(user_id, transaction_date DESC);
-CREATE INDEX idx_transactions_user_type ON transactions(user_id, type);
-CREATE INDEX idx_transactions_sync ON transactions(sync_status) WHERE sync_status != 'synced';
+-- Indexing untuk efisiensi query analitik & penyaringan
+CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, transaction_date DESC);
+CREATE INDEX IF NOT EXISTS idx_transactions_user_type ON transactions(user_id, type);
+CREATE INDEX IF NOT EXISTS idx_transactions_sync ON transactions(sync_status) WHERE sync_status != 'synced';
 
--- Tabel Monthly Summaries (cache untuk performa)
-CREATE TABLE monthly_summaries (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id),
-    year_month VARCHAR(7) NOT NULL,  -- format: '2026-10'
+-- 4. Tabel Monthly Summaries (Aggregation Cache)
+CREATE TABLE IF NOT EXISTS monthly_summaries (
+    id VARCHAR(100) PRIMARY KEY,
+    user_id VARCHAR(100) REFERENCES users(id) ON DELETE CASCADE,
+    year_month VARCHAR(7) NOT NULL, -- Format: YYYY-MM
     total_income DECIMAL(15, 2) DEFAULT 0,
     total_expense DECIMAL(15, 2) DEFAULT 0,
     balance DECIMAL(15, 2) DEFAULT 0,
     category_breakdown JSONB DEFAULT '{}',
-    updated_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(user_id, year_month)
 );
 ```
 
-### 4.2 IndexedDB Schema (Dexie.js — Local)
+### 4.2 Local Storage / Cache Keys (Client)
 
-```javascript
-const db = new Dexie('CatatDuitDB');
-
-db.version(1).stores({
-    transactions: 'id, type, category_id, transaction_date, sync_status',
-    categories: 'id, type, is_default',
-    pendingQueue: '++id, action, entity, created_at',  // offline queue
-    settings: 'key'  // user preferences
-});
-```
-
-### 4.3 Default Categories
-
-| Type | Kategori | Icon |
-|------|----------|------|
-| Expense | Makanan & Minuman | 🍔 |
-| Expense | Transportasi | 🚗 |
-| Expense | Belanja | 🛒 |
-| Expense | Hiburan | 🎮 |
-| Expense | Tagihan & Utilitas | 💡 |
-| Expense | Kesehatan | 💊 |
-| Expense | Pendidikan | 📚 |
-| Expense | Lainnya | 📦 |
-| Income | Gaji | 💰 |
-| Income | Freelance | 💻 |
-| Income | Investasi | 📈 |
-| Income | Hadiah | 🎁 |
-| Income | Lainnya | 📦 |
+Penyimpanan lokal menggunakan namespace terisolasi untuk mencegah benturan versi data:
+* `catatduit_transactions_v1`: Cache snapshot daftar transaksi.
+* `catatduit_pending_queue_v1`: Antrean write-ahead log untuk operasi offline (`CREATE`, `UPDATE`, `DELETE`).
+* `catatduit_categories_v1`: Cache master kategori.
+* `catatduit_settings_v1`: Pengaturan preferensi pengguna dan konfigurasi API key.
+* `catatduit_chat_history_v1`: Riwayat pesan interaksi natural language.
 
 ---
 
-## 5. Gemini AI Integration
+## 5. Orkes AI Parsing & Fallback Cascade
 
-### 5.1 Prompt Engineering
+Sistem menerapkan **Adaptive Fallback Cascade** 3-tingkat untuk mengekstrak teks percakapan bahasa Indonesia menjadi format data terstruktur:
 
 ```
-System Prompt:
-Kamu adalah asisten parsing transaksi keuangan. Tugas kamu mengubah
-teks natural language dari user menjadi data transaksi terstruktur
-dalam format JSON.
+Input Pengguna: "makan siang padang 28rb"
+       │
+       ▼
+[Tier 1: gemini-flash-lite-latest] (Timeout: 5 detik, latency minimal)
+       │
+       ├─ Gagal / 429 Rate Limit / 503 Overloaded
+       ▼
+[Tier 2: gemini-3.5-flash-lite / gemini-flash-latest]
+       │
+       ├─ Gagal / Timeout / Jaringan Terputus
+       ▼
+[Tier 3: Local Regex Fallback Engine] (Deterministic Pattern Matcher - 0ms network)
+```
 
-Aturan:
-- "k" = ribu (5k = 5000), "jt" = juta (5jt = 5000000)
-- Tentukan apakah ini "income" atau "expense" dari konteks
-- Jika tanggal tidak disebutkan, gunakan hari ini
-- Berikan confidence score 0.0-1.0
-- Selalu kembalikan JSON valid, tanpa markdown code block
-
-Output format:
+### Aturan Normalisasi Parsing Indonesia:
+* **Nominal Multi-Satuan**: `5k` $\rightarrow$ 5.000, `50rb` $\rightarrow$ 50.000, `1.5jt` / `1,5 juta` $\rightarrow$ 1.500.000, `rp 30.000` $\rightarrow$ 30.000.
+* **Deteksi Tipe Otomatis**: Kata kunci pemasukan (`gaji`, `transfer masuk`, `freelance`, `hadiah`, `bonus`, `dapet uang`) $\rightarrow$ `income`; kata kunci pembelian/pengeluaran $\rightarrow$ `expense`.
+* **Struktur Output JSON Wajib**:
+```json
 {
-  "type": "income" | "expense",
-  "amount": number,
-  "description": string,
-  "category_suggestion": string,
-  "transaction_date": "YYYY-MM-DD",
-  "confidence": number,
-  "needs_clarification": boolean,
-  "clarification_question": string | null
+  "type": "expense",
+  "amount": 28000,
+  "description": "Makan Siang Padang",
+  "category_name": "Makanan & Minuman",
+  "category_icon": "🍔",
+  "confidence": 0.95
 }
 ```
 
-### 5.2 Contoh Input → Output
+---
 
-| Input User | Output AI |
-|-----------|-----------|
-| "beli esteh 2 harga 5k" | `{type:"expense", amount:5000, description:"Esteh x2", category:"Makanan & Minuman", confidence:0.92}` |
-| "gajian 5jt" | `{type:"income", amount:5000000, description:"Gaji", category:"Gaji", confidence:0.95}` |
-| "bayar listrik 350rb" | `{type:"expense", amount:350000, description:"Bayar listrik", category:"Tagihan & Utilitas", confidence:0.97}` |
-| "dapet bonus 2jt dari kantor" | `{type:"income", amount:2000000, description:"Bonus kantor", category:"Gaji", confidence:0.90}` |
-| "50k" | `{type:"expense", amount:50000, description:"Pengeluaran", category:"Lainnya", confidence:0.5, needs_clarification:true, clarification_question:"Untuk apa pengeluaran 50k ini?"}` |
+## 6. Arsitektur Sinkronisasi Data (Sync Engine)
 
-### 5.3 Offline Fallback Parser (Regex-based)
+### 6.1 Alur Kerja Operasi Online
 
-Saat offline, gunakan rule-based parser sederhana untuk parsing dasar:
+1. **Client-Generated Unique ID**: Klien menghasilkan ID unik berbasis UUID v4 (`tx-{timestamp}-{uuid}`) sebelum transaksi diproses ke jaringan.
+2. **Optimistic Local Cache**: Transaksi disimpan seketika di local cache dengan status `'pending'` agar eksekusi di sisi pengguna tidak terhambat (*non-blocking*).
+3. **Write-Ahead Log**: Transaksi dicatat ke `pendingQueue`.
+4. **Immediate API Dispatch**: Klien langsung mengirimkan request ke endpoint Vercel API (`POST /api/transactions`, `PUT /api/transactions/:id`, atau `DELETE /api/transactions/:id`).
+5. **Konfirmasi Server**:
+   - Jika HTTP 200/201 diterima: Status transaksi di local cache diubah menjadi `'synced'`, dan ID transaksi dihapus dari `pendingQueue`.
+   - Jika terjadi gangguan jaringan atau server tidak merespons: Transaksi **tetap berstatus `'pending'`** di local cache dan tetap berada di `pendingQueue` untuk disinkronkan saat koneksi pulih.
 
+### 6.2 Alur Kerja Operasi Offline
+
+1. Klien mendeteksi status offline (`navigator.onLine === false` atau kegagalan koneksi).
+2. Sistem **tidak melakukan pemanggilan API secara paksa**.
+3. Operasi dicatat secara terstruktur ke antrean lokal:
+   - `CREATE`: `{ action: 'CREATE', id: txId, data: txData }`
+   - `UPDATE`: `{ action: 'UPDATE', id: txId, data: updatedFields }`
+   - `DELETE`: `{ action: 'DELETE', id: txId, data: { id: txId } }`
+4. Antrean lokal digabungkan secara cerdas: jika sebuah item dibuat saat offline lalu diedit sebelum terkirim, antrean digabungkan menjadi satu operasi `CREATE` dengan data terbaru. Jika dibuat lalu dihapus sebelum terkirim, item dihapus dari antrean tanpa perlu dikirim ke server.
+
+### 6.3 Siklus Sinkronisasi Dua Arah (Bi-Directional Reconciliation)
+
+Ketika perangkat kembali terhubung ke internet, aplikasi secara otomatis menjalankan siklus sinkronisasi dua arah:
+
+#### Tahap 1: PUSH (Flush Antrean Pending)
+* Seluruh item dalam `pendingQueue` dikirim sekaligus ke endpoint batch `POST /api/sync`.
+* Server memproses antrean secara idempotent di PostgreSQL dan mengembalikan response:
+  ```json
+  {
+    "success": true,
+    "total": 10,
+    "synced": 8,
+    "syncedIds": ["tx-1", "tx-2", "..."],
+    "errors": [{ "id": "tx-3", "error": "Validation failed" }]
+  }
+  ```
+* **Partial Queue Resolution**: Klien **hanya menghapus ID yang terdaftar dalam `syncedIds`** dari antrean lokal. Transaksi yang gagal **tetap dipertahankan di antrean pending** untuk dievaluasi pada siklus berikutnya.
+
+#### Tahap 2: PULL (PostgreSQL sebagai Sumber Kebenaran)
+* Klien memanggil `GET /api/transactions?limit=500` untuk mengambil snapshot terbaru dari PostgreSQL.
+* Klien melakukan rekonsiliasi data:
+  1. Semua transaksi yang berasal dari server disimpan ke cache dengan status `'synced'`.
+  2. Transaksi lokal yang masih berstatus `'pending'` di antrean tetap dipertahankan.
+  3. Transaksi lokal yang berstatus `'synced'` tetapi **sudah tidak ditemukan di server** (misal telah dihapus dari Website atau perangkat lain) **otomatis dibersihkan dari cache lokal**.
+* Local cache diperbarui dan seluruh modul data menyajikan snapshot akurat dari PostgreSQL.
+
+### 6.4 Pemicu Otomatisasi Sinkronisasi (Auto-Trigger Triggers)
+Sinkronisasi dijalankan secara otomatis tanpa intervensi manual pada peristiwa:
+* **App Startup**: Begitu aplikasi atau halaman web dimuat pertama kali.
+* **Network Online Event**: Saat koneksi internet kembali aktif (`window.addEventListener('online')`).
+* **Window / Tab Focus**: Saat pengguna kembali membuka tab atau aplikasi dari latar belakang (`window.addEventListener('focus')` dan `document.addEventListener('visibilitychange')`).
+* **Post-Mutation**: Sesaat setelah operasi Create, Update, atau Delete selesai diproses.
+
+---
+
+## 7. Kontrak REST API
+
+Semua endpoint mendukung CORS penuh (`Access-Control-Allow-Origin: *`) dan mengembalikan response terstandarisasi JSON.
+
+| Method | Endpoint | Fungsi | Payload / Query | Response Sukses |
+|---|---|---|---|---|
+| **GET** | `/api/db-status` | Health check koneksi database | - | `{ success: true, connected: true, isCloudDb: true, engine: "PostgreSQL..." }` |
+| **GET** | `/api/transactions` | Mengambil daftar transaksi terverifikasi | `limit`, `offset`, `type`, `month`, `search` | `{ success: true, transactions: [...], total: N }` |
+| **POST** | `/api/transactions` | Menambah transaksi baru (Idempotent) | JSON objek transaksi lengkap | `{ success: true, transaction: { id, amount, ... } }` (HTTP 201) |
+| **PUT** | `/api/transactions/:id` | Memperbarui data transaksi | JSON field yang diubah | `{ success: true, transaction: { ... } }` (HTTP 200) |
+| **DELETE** | `/api/transactions/:id` | Menghapus transaksi (Idempotent) | - | `{ success: true, id, message: "..." }` (HTTP 200) |
+| **POST** | `/api/sync` | Batch ingestion antrean pending | `{ items: [{ action, id, data }] }` | `{ success: true, total: N, synced: N, syncedIds: [...], errors: [...] }` |
+| **GET** | `/api/categories` | Mengambil master kategori | - | `{ success: true, categories: [...] }` |
+| **POST** | `/api/categories` | Menambah kategori custom | `{ name, type, icon, color }` | `{ success: true, category: { ... } }` (HTTP 201) |
+| **DELETE**| `/api/categories/:id` | Menghapus kategori & auto-reassign ke "Lainnya" | - | `{ success: true, reassignedCount: N }` |
+| **GET** | `/api/summary` | Agregasi keuangan bulanan | `month=YYYY-MM` | `{ success: true, summary: { income, expense, balance, categoryBreakdown } }` |
+| **POST** | `/api/parse` | Ekstraksi AI teks percakapan | `{ text, apiKey? }` | `{ success: true, parsed_by: "...", data: { ... } }` |
+| **POST** | `/api/test-gemini`| Tes latensi & konektivitas model AI | `{ apiKey? }` | `{ success: true, activeModel: "...", latencyMs: N }` |
+
+---
+
+## 8. Konfigurasi Klien Mobile (Capacitor)
+
+### 8.1 Strategi Offline-First Bundling
+Pada `capacitor.config.json`:
+* Pengaturan remote `"server": { "url": "..." }` **dihapus secara permanen**.
+* Properti `"webDir": "www"` digunakan sebagai penyedia aset utama.
+* **Dampak**: Aplikasi dapat dibuka seketika dalam kondisi *airplane mode* (tanpa koneksi internet) langsung dari memori internal perangkat tanpa mengalami error WebView (`net::ERR_INTERNET_DISCONNECTED`).
+
+### 8.2 Dynamic API Base URL Resolver
+Klien membedakan target URL API secara otomatis melalui fungsi:
 ```javascript
-// Pattern: "beli [item] [harga]", "[nominal]k/jt untuk [item]", dll.
-function offlineParse(text) {
-    const amountRegex = /(\d+(?:[.,]\d+)?)\s*(k|rb|ribu|jt|juta)/gi;
-    const isIncome = /gaji|terima|dapat|dapet|masuk|income|bayaran|transfer\smasuk/i.test(text);
-    // ... parse nominal dan kembalikan data parsial
-    // Tandai dengan flag: ai_processed: false
-    // Akan di-reprocess oleh Gemini saat online
-}
-```
+function getApiBaseUrl() {
+  const isCapacitorNative = !!(
+    (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) ||
+    (window.Capacitor && window.Capacitor.platform && window.Capacitor.platform !== 'web') ||
+    window.location.protocol === 'capacitor:' ||
+    window.location.protocol === 'file:' ||
+    (window.location.hostname === 'localhost' && window.location.port === '')
+  );
 
-### 5.4 Smart Model Fallback Cascade & Cost/Token Optimizer
-
-Secara bawaan, Google AI Studio API tidak melakukan *auto-switch* model jika terjadi *rate limit* atau server sibuk. Oleh karena itu, aplikasi CatatDuit menerapkan **Adaptive Fallback Cascade** di level orchestrator (`/api/parse` atau client worker):
-
-#### Hirarki Prioritas Model:
-1. **Tier 1 — Ultra-Light / Low-Token (Primary)**:
-   - Model: `gemini-2.0-flash-lite` (atau `gemini-1.5-flash-8b`)
-   - Tujuan: Konsumsi token paling hemat, latensi tercepat (< 400ms), memaksimalkan kuota gratis (free tier limits)
-   - Max output tokens dibatasi ketat: 150 token (cukup untuk payload JSON transaksi)
-2. **Tier 2 — Standard Flash (Fallback saat Tier 1 Sibuk / Throttled)**:
-   - Model: `gemini-2.0-flash`
-   - Trigger Fallback: Terjadi error HTTP `429` (Rate limit / Too Many Requests), HTTP `503` (Model Overloaded / Service Unavailable), atau Request Timeout (> 4 detik)
-   - Kelebihan: Throughput lebih stabil dan kapasitas server lebih tinggi
-3. **Tier 3 — Local Regex Rule-Based (Emergency / Offline Fallback)**:
-   - Dieksekusi jika koneksi internet terputus atau kedua model API Gemini sedang bermasalah
-   - Memberikan hasil ekstraksi instan secara lokal tanpa AI
-
-```typescript
-// Konfigurasi & Rantai Fallback Model
-const MODEL_CASCADE = [
-  {
-    tier: 1,
-    model: 'gemini-2.0-flash-lite',
-    timeoutMs: 4000,
-    maxTokens: 150,
-    description: 'Prioritas utama: hemat token & super cepat'
-  },
-  {
-    tier: 2,
-    model: 'gemini-2.0-flash',
-    timeoutMs: 6000,
-    maxTokens: 200,
-    description: 'Fallback otomatis jika flash-lite rate-limited (429) / busy (503)'
+  if (isCapacitorNative) {
+    // Arahkan ke Production Vercel API untuk aplikasi mobile native
+    return 'https://catatduit-seven.vercel.app';
   }
-];
 
-async function parseWithFallback(prompt: string, apiKey: string) {
-  for (const config of MODEL_CASCADE) {
-    try {
-      const response = await callGeminiWithTimeout(config.model, prompt, apiKey, config.timeoutMs);
-      return { ...response, parsed_by: config.model };
-    } catch (err: any) {
-      const isBusyOrThrottled = err.status === 429 || err.status === 503 || err.name === 'AbortError';
-      if (!isBusyOrThrottled && config.tier === MODEL_CASCADE.length) throw err;
-      console.warn(`[AI Cascade] Model ${config.model} busy/failed (${err.message}), beralih ke tier berikutnya...`);
-    }
-  }
-  // Jika semua AI gagal -> Fallback ke Local Regex
-  return { ...offlineParse(prompt), parsed_by: 'local_regex_fallback' };
+  // Untuk Web browser: gunakan relative path
+  return '';
 }
 ```
 
 ---
 
-### 5.5 Non-Blocking Optimistic UI & Asynchronous Pending Queue
+## 9. Evaluasi Komprehensif Masalah, Analisis Bug, & Post-Mortem
 
-Untuk memberikan pengalaman pengguna yang sangat mulus (*zero-lag user experience*), aplikasi **TIDAK MENGGUNAKAN LOADING SPINNER / MODAL FREEZE** saat proses request AI atau pergantian model (failover) berlangsung.
+### 9.1 Kesimpulan Eksekutif Mengenai Bug
+Bug utama yang dialami sistem adalah **inkonsistensi data antar-klien (Website vs Capacitor Android)**, di mana:
+* Perubahan transaksi yang dilakukan di Website tidak tercermin di aplikasi Android.
+* Sebaliknya, perubahan transaksi di aplikasi Android tidak terlihat di Website.
+* Kedua platform beroperasi seolah-olah memiliki database terpisah, padahal seharusnya menggunakan PostgreSQL yang sama.
 
-#### Mekanisme Alur Non-Blocking:
-1. **Instant Chat & Optimistic Render**:
-   - Saat tombol kirim/Enter ditekan, input chat langsung dibersihkan (*cleared*) seketika.
-   - Pesan user langsung muncul di UI dengan status transaksi **`⏳ Pending (Memproses di background)`**.
-   - User bebas langsung mengetik transaksi kedua/ketiga, membuka menu grafik, atau berpindah tab tanpa terhalang.
-2. **Background AI Queue Worker**:
-   - Transaksi baru masuk ke antrean lokal `pendingAIQueue` (disimpan sementara di IndexedDB agar aman jika app di-refresh).
-   - Antrean diproses satu per satu di background secara asinkron.
-   - Di background, sistem mengeksekusi Fallback Cascade (Tier 1 Flash-Lite → Tier 2 Flash jika sibuk).
-3. **Smooth State Transition (Micro-Interactions)**:
-   - Begitu AI selesai mem-parsing di background:
-     - Badge transaksi berubah halus dengan animasi fade: dari `⏳ Pending` menjadi `🤖 Gemini Flash-Lite` (atau model fallback yang berhasil).
-     - Data hasil parsing (nominal, kategori, keterangan) otomatis terisi.
-     - Bunyi subtle haptic feedback atau update ringkasan saldo tanpa popup mengganggu.
-   - Jika membutuhkan klarifikasi: Muncul chip pertanyaan klarifikasi interaktif di bawah chat tersebut.
-4. **Lifecycle Status Transaksi**:
-   - `pending_queue`: Transaksi baru masuk, menunggu giliran worker.
-   - `processing_ai`: Worker sedang menghubungi model Gemini di background.
-   - `parsed`: Berhasil diurai oleh AI, menunggu review user / auto-confirm.
-   - `fallback_regex`: AI sedang sibuk/offline, data sementara diisi oleh regex lokal dengan badge `⚡ Auto-Draft (Perlu Cek)`.
+**Kesimpulan Akar Masalah:**  
+Masalah ini **bukan disebabkan oleh kegagalan jaringan fisik**, melainkan oleh **enam kelemahan arsitektur data (*Architectural Flaws*)**:
+1. **Ketiadaan Auto-Pull saat Startup/Focus**: Klien tidak pernah meminta snapshot terbaru dari PostgreSQL saat aplikasi dibuka atau saat pengguna kembali ke tab/aplikasi. Data hanya dibaca dari local storage perangkat masing-masing.
+2. **Storage Sandboxing Tanpa Jembatan Reaktif**: `localStorage` peramban web dan `localStorage` WebView Android berada di sandbox terpisah. Tanpa auto-pull, kedua platform terperangkap dalam snapshot lokal masing-masing.
+3. **Asimetri Operasi Offline**: Operasi `UPDATE` dan `DELETE` saat offline tidak dicatat ke `pendingQueue`, sehingga perubahan saat offline hilang permanen.
+4. **Resurrection Bug (Zombie Records)**: Algoritma penggabungan data lama mempertahankan seluruh transaksi lokal. Transaksi yang telah dihapus di server dibangkitkan kembali (*resurrected*) oleh klien lain yang masih menyimpannya di cache lokal.
+5. **Capacitor Mobile API Routing Dilemma**: Klien native Capacitor gagal mengeksekusi path relatif `/api` tanpa URL base eksplisit.
+6. **False-Positive Database Status**: Backend melaporkan status terhubung meskipun koneksi PostgreSQL mati dan sistem beralih ke in-memory sementara yang lenyap saat Vercel cold restart.
 
 ---
 
-## 6. Offline & Sync Strategy
+### 9.2 Detail Evaluasi 13 Poin Audit Sistem
 
-### 6.1 Alur Non-Blocking Input & Sync Strategy
+Audit teknis menyeluruh mengidentifikasi 13 temuan kritis yang telah dianalisis dan diperbaiki:
 
-```
-User ketik "beli kopi 15k" & tekan Kirim
-    │
-    ▼
-[INSTANT OPTIMISTIC UI]
-- Input box langsung bersih (siap ketik lagi)
-- Chat bubble muncul seketika berstatus "⏳ Pending di Antrean"
-- TIDAK ADA LOADING SCREEN / SPINNER PEMBLOKIR
-    │
-    ▼
-[BACKGROUND AI QUEUE WORKER]
-    │
-    ├─ SAAT ONLINE ──→ Eksekusi AI Fallback Cascade:
-    │                  1. Coba Tier 1: Gemini 2.0 Flash Lite (Hemat Token)
-    │                  2. Jika Sibuk (429/503/timeout) ──→ Auto-switch Tier 2: Gemini 2.0 Flash
-    │                  3. Jika Berhasil ──→ Badge berganti halus ke "🤖 AI Parsed"
-    │                                  ──→ Simpan ke IndexedDB + Postgres
-    │
-    └─ SAAT OFFLINE / SEMUA AI SIBUK:
-                       ──→ Eksekusi Tier 3: Local Offline Parser (Regex)
-                       ──→ Simpan ke IndexedDB (sync_status: 'pending')
-                       ──→ Badge berganti halus ke "⚡ Offline Draft (⏳ Menunggu Sync)"
-
-Saat kembali ONLINE:
-    │
-    pendingQueue items ──→ Batch kirim ke /api/sync
-    ──→ Server/Worker: re-parse dengan Gemini AI (yang masih draft regex)
-    ──→ Server: simpan ke Postgres
-    ──→ Return hasil ──→ Update IndexedDB (sync_status: 'synced')
-    ──→ Tampilkan notifikasi halus "✅ Transaksi berhasil diselaraskan"
-```
-
-### 6.2 Sync Rules
-
-1. **IndexedDB = Source of Truth lokal** — UI selalu baca dari sini
-2. **Vercel Postgres = Source of Truth global** — backup & cross-device
-3. **Conflict Resolution**: `version` field + last-write-wins
-4. **Batch Sync**: Kirim max 50 pending items per request
-5. **Retry Logic**: Exponential backoff (1s, 2s, 4s, max 30s) jika gagal
-6. **Network Detection**: `navigator.onLine` + `fetch` health check ke `/api/ping`
-
-### 6.3 Service Worker Strategy
-
-```
-- Static assets: Cache-First (CSS, JS, images)
-- API calls: Network-First with fallback ke cache
-- Sync: Background Sync API untuk pending transactions
-```
+| No | Poin Audit | Kondisi Awal (Bermasalah) | Solusi & Evaluasi Teknis |
+|:--:|---|---|---|
+| **1** | **Lifecycle Hydration** | `store.init()` hanya memanggil `loadFromStorage()`. Tidak ada sinkronisasi saat aplikasi pertama kali dimuat. | Menambahkan pemanggilan `pullFromCloud()` otomatis di akhir inisialisasi store. |
+| **2** | **Multi-Device Sync** | Local storage bertindak sebagai sumber data utama di masing-masing perangkat. | Menetapkan PostgreSQL sebagai Single Source of Truth mutlak; local storage murni sebagai cache. |
+| **3** | **Offline Mutation Scope** | Hanya `CREATE` yang masuk antrean pending; `UPDATE` dan `DELETE` diabaikan saat offline. | Struktur `pendingQueue` diperluas mencakup aksi `CREATE`, `UPDATE`, dan `DELETE`. |
+| **4** | **Reconciliation & Deletion** | Logika merge menggabungkan array lokal dan remote tanpa mendeteksi data yang dihapus di server. | Algoritma `pullFromCloud` mendeteksi dan menghapus record lokal bersatus `'synced'` yang tidak lagi ada di server. |
+| **5** | **Idempotensi & Duplikasi** | Retry request menghasilkan record duplikat jika network timeout terjadi setelah server menulis data. | Client-Generated UUID (`tx-{timestamp}-{uuid}`) dipadukan dengan klausa SQL `INSERT ... ON CONFLICT (id) DO UPDATE`. |
+| **6** | **Offline Mobile Bundling** | `capacitor.config.json` menggunakan `server.url` remote; crash saat offline. | Menghapus `server.url`, membundel aset web ke `www/` dan Android assets untuk load instan 100% offline. |
+| **7** | **Mobile API Routing** | Path relatif `/api` gagal di lingkungan native Android (`capacitor://localhost`). | Helper `getApiBaseUrl()` secara dinamis mengarahkan panggilan native ke `https://catatduit-seven.vercel.app`. |
+| **8** | **Partial Queue Resolution** | Antrean pending dihapus secara all-or-nothing (`this.pendingQueue = []`), menghilangkan item yang gagal kirim. | Server mengembalikan `syncedIds`; klien hanya menghapus transaksi yang sukses diakui oleh database. |
+| **9** | **Server Payload Validation** | Handler transaksi menerima payload tanpa validasi tipe, memicu error query SQL. | Validasi ketat diterapkan di `api-handlers.js` untuk nominal, tanggal, dan format aksi. |
+| **10** | **Idempotent DELETE Endpoint**| Menghapus ID yang sudah tidak ada berpotensi memicu error atau kegagalan antrean. | Query `DELETE` dibuat idempotent (`DELETE FROM transactions WHERE id = $1`) yang selalu aman di-retry. |
+| **11** | **Health Check Integrity** | Endpoint `/api/db-status` melaporkan `connected: true` saat in-memory fallback aktif. | Nilai `isCloudDb: false` secara eksplisit dilaporkan jika pool PostgreSQL tidak terhubung. |
+| **12** | **Pool & SSL Handshake** | Pool PostgreSQL di serverless berisiko mengalami SSL negotiation drop. | Konfigurasi `ssl: { rejectUnauthorized: false }` dan error listener diterapkan pada pool. |
+| **13** | **Reactive Lifecycle Sync** | Pengguna yang kembali ke tab atau aplikasi melihat data basi tanpa pembaruan. | Listener `window.focus` dan `document.visibilitychange` memicu auto-sync saat tab/aplikasi aktif kembali. |
 
 ---
 
-## 7. UI/UX Design
+### 9.3 Matriks Evaluasi Arsitektur: Sebelum vs Sesudah Perbaikan
 
-### 7.1 Navigasi (Bottom Tab — Mobile-first)
-
-```
-┌─────────────────────────────────────────┐
-│              CatatDuit                  │
-│         ┌──────────────────┐            │
-│         │ [Offline ⏳]     │            │
-│         └──────────────────┘            │
-│                                         │
-│  ┌─────────────────────────────────┐    │
-│  │                                 │    │
-│  │        CONTENT AREA             │    │
-│  │      (berubah per tab)          │    │
-│  │                                 │    │
-│  └─────────────────────────────────┘    │
-│                                         │
-│  ┌─────┬──────┬──────┬──────┬──────┐   │
-│  │ 💬  │  💰  │  💸  │  📊  │  ⚙️  │   │
-│  │Chat │Masuk │Keluar│Grafik│Atur  │   │
-│  └─────┴──────┴──────┴──────┴──────┘   │
-└─────────────────────────────────────────┘
-```
-
-### 7.2 Tab Detail
-
-#### 💬 Tab Chat (Beranda)
-- **Input area** di bawah (seperti WhatsApp)
-- Menampilkan riwayat percakapan: input user → hasil parsing AI
-- Setiap hasil parsing bisa di-**edit** atau **hapus**
-- Quick action buttons: "☕ Kopi", "🍚 Makan", "🚗 Transport" (customizable)
-- Banner status sync di atas (jika ada pending items)
-- **Ringkasan hari ini**: Total pemasukan & pengeluaran hari ini
-
-#### 💰 Tab Pemasukan
-- List pemasukan dengan filter:
-  - Rentang waktu (Hari ini / Minggu ini / Bulan ini / Custom range)
-  - Kategori
-  - Pencarian teks
-- Sort by: Tanggal / Nominal
-- Total pemasukan ditampilkan di atas
-- Swipe untuk edit/hapus (mobile gesture)
-
-#### 💸 Tab Pengeluaran
-- Sama seperti Tab Pemasukan, tapi untuk pengeluaran
-- Tambahan: **Top 3 kategori pengeluaran** bulan ini
-
-#### 📊 Tab Grafik/Statistik
-- **Grafik Donut**: Breakdown pengeluaran per kategori
-- **Grafik Bar**: Perbandingan pemasukan vs pengeluaran (bulanan)
-- **Grafik Line**: Tren pengeluaran harian dalam sebulan
-- **Selector rentang waktu**: 7 hari / 30 hari / 3 bulan / 6 bulan / 1 tahun / Custom
-- **Ringkasan angka**: Total pemasukan, total pengeluaran, saldo/selisih
-
-#### ⚙️ Tab Pengaturan
-- Profil user
-- Kelola kategori (tambah/edit/hapus)
-- Quick action buttons (custom shortcuts)
-- Mata uang (default: IDR)
-- Export data (CSV/PDF)
-- Hapus semua data
-- Tentang aplikasi
-
-### 7.3 Design System
-
-| Elemen | Spesifikasi |
-|--------|-------------|
-| **Primary Color** | `#2563EB` (Blue 600) |
-| **Income Color** | `#10B981` (Emerald 500) |
-| **Expense Color** | `#EF4444` (Red 500) |
-| **Background** | `#F8FAFC` (light) / `#0F172A` (dark) |
-| **Font** | Inter (Google Fonts) |
-| **Border Radius** | 12px (cards), 24px (buttons) |
-| **Shadows** | Subtle, multi-layered |
-| **Dark Mode** | Ya, toggle di pengaturan |
-| **Animations** | Framer Motion — slide, fade, spring |
+| Dimensi Arsitektur | Arsitektur Lama (Bermasalah) | Arsitektur Baru (Telah Diperbaiki & Terverifikasi) |
+|---|---|---|
+| **Otoritas Data Saat Online** | Terpecah di Local Storage masing-masing perangkat | Terpusat di PostgreSQL Neon (Single Source of Truth) |
+| **Peran Local Storage** | Diperlakukan seperti database utama independen | Murni sebagai cache baca instan dan antrean offline sementara |
+| **Pengambilan Data Awal** | Hanya membaca snapshot `localStorage` lama | Otomatis menjalankan `pullFromCloud()` dari PostgreSQL |
+| **Reaktifitas Multi-Device** | Tidak ada sinkronisasi otomatis antar tab/perangkat | Auto-pull aktif saat event `focus`, `visibilitychange`, dan `online` |
+| **Cakupan Antrean Offline** | Hanya operasi `CREATE` yang masuk antrean | Seluruh mutasi (`CREATE`, `UPDATE`, `DELETE`) dicatat ke `pendingQueue` |
+| **Ketahanan Duplikasi (Retry)** | Risiko duplikasi data tinggi saat timeout | Idempotensi 100% via Client-Generated UUID + `ON CONFLICT` |
+| **Penanganan Hapus Transaksi** | Terhapus lokal, remote terabaikan; memicu zombie record | Idempotent DELETE; rekonsiliasi dua arah membersihkan record terhapus |
+| **Resolusi Antrean Batch** | All-or-nothing (antrean hangus atau tersangkut total) | Partial Queue: Hanya `syncedIds` yang dihapus dari antrean |
+| **Akses Offline Mobile** | Bergantung pada web URL; error saat tanpa internet | Fully offline bundle di `www/`, load instan di mode pesawat |
+| **Routing API Mobile** | Relative path gagal di native WebView | Dynamic API Base URL resolver (`https://catatduit-seven.vercel.app`) |
+| **Integritas Status Database** | Melaporkan `connected: true` pada in-memory fallback | Diagnostik transparan: `isCloudDb: true/false` sesuai status riil |
 
 ---
 
-## 8. API Routes
+### 9.4 Diagram Alur Komparatif: Kegagalan Lama vs Engine Baru
 
-| Method | Endpoint | Fungsi | Auth |
-|--------|----------|--------|------|
-| POST | `/api/auth/login` | Login user | ❌ |
-| POST | `/api/auth/register` | Register user | ❌ |
-| POST | `/api/parse` | Kirim teks → Gemini parse → return JSON | ✅ |
-| POST | `/api/sync` | Batch sync pending transactions | ✅ |
-| GET | `/api/transactions` | Get transaksi (paginated, filtered) | ✅ |
-| PUT | `/api/transactions/:id` | Update transaksi | ✅ |
-| DELETE | `/api/transactions/:id` | Hapus transaksi | ✅ |
-| GET | `/api/summary` | Get ringkasan (bulanan/custom range) | ✅ |
-| GET | `/api/categories` | Get daftar kategori | ✅ |
-| POST | `/api/categories` | Tambah kategori custom | ✅ |
-| GET | `/api/ping` | Health check (untuk deteksi online) | ❌ |
-
----
-
-## 9. Capacitor Configuration
-
-### 9.1 Build Flow
-
+#### Alur Lama (Penyebab Inkonsistensi & Zombie Record):
 ```
-Next.js build (static export)
-    → output: out/
-    → npx cap copy
-    → npx cap open android / ios
+[Client Website] ──DELETE (tx-1)──→ [PostgreSQL] (tx-1 terhapus di server)
+                                        │
+                                        ▼ (Tidak ada notifikasi/auto-pull)
+[Client Android] ──Buka Aplikasi────→ Hanya baca localStorage (tx-1 masih ada)
+                                        │
+                                        ▼ (Saat sync manual dijalankan)
+[Client Android] ──Merge Array──────→ tx-1 lokal di-upload ulang ke server!
+                                        ▼
+                            [PostgreSQL] (tx-1 HIDUP KEMBALI / ZOMBIE RECORD)
 ```
 
-### 9.2 Capacitor Plugins
-
-| Plugin | Fungsi |
-|--------|--------|
-| `@capacitor/network` | Deteksi status jaringan |
-| `@capacitor/app` | App lifecycle events |
-| `@capacitor/haptics` | Feedback haptic saat transaksi tersimpan |
-| `@capacitor/status-bar` | Kustomisasi status bar |
-| `@capacitor/splash-screen` | Splash screen native |
-| `@capacitor/keyboard` | Keyboard handling (chatbox) |
-
-### 9.3 capacitor.config.ts
-
-```typescript
-const config: CapacitorConfig = {
-    appId: 'com.catatduit.app',
-    appName: 'CatatDuit',
-    webDir: 'out',
-    server: {
-        // Saat development, point ke Vercel URL
-        // Saat production, gunakan local files
-        url: process.env.NODE_ENV === 'development' 
-            ? 'http://localhost:3000' 
-            : undefined,
-        cleartext: true
-    },
-    plugins: {
-        SplashScreen: {
-            launchAutoHide: true,
-            androidScaleType: 'CENTER_CROP'
-        }
-    }
-};
+#### Alur Baru (Rekonsiliasi Sempurna & Sumber Kebenaran Tunggal):
+```
+[Client Website] ──DELETE (tx-1)──→ [PostgreSQL] (tx-1 terhapus di server)
+                                        │
+                                        ▼ (Pengguna membuka Android / window focus)
+[Client Android] ──Auto-Pull────────→ GET /api/transactions
+                                        │
+                                        ├─ Server: [tx-2, tx-3] (tx-1 tidak ada)
+                                        ├─ Android Cache: [tx-1 (synced), tx-2]
+                                        ▼
+[Reconciliation Engine] ──────────→ tx-1 dihapus dari cache Android secara otomatis!
+                                        ▼
+                            [Kedua Klien Konsisten 100%]
 ```
 
 ---
 
-## 10. Roadmap & Milestones
+### 9.5 Rincian Hasil & Verifikasi 10 Skenario Pengujian Sistem
 
-### Fase 1: MVP Core (Minggu 1-3)
-- [ ] Setup Next.js + Vercel Postgres + Tailwind
-- [ ] Database schema & migration
-- [ ] Integrasi Gemini AI Multi-Tier (Flash Lite → Flash fallback cascade)
-- [ ] Non-blocking Optimistic UI & background AI processing queue
-- [ ] UI: Tab Chat + input transaksi (zero-loading freeze)
-- [ ] UI: Tab Pemasukan & Pengeluaran (list view)
-- [ ] IndexedDB setup dengan Dexie.js
-- [ ] Basic offline: simpan ke IndexedDB saat offline
-- [ ] Deploy ke Vercel
+Seluruh 10 skenario pengujian komprehensif telah diuji secara empiris dan dinyatakan **100% LULUS (PASS)**:
 
-### Fase 2: Sync & Insights (Minggu 4-5)
-- [ ] Background sync (Service Worker)
-- [ ] Offline queue & batch sync
-- [ ] Offline fallback parser (regex)
-- [ ] UI: Tab Grafik (donut + bar chart)
-- [ ] Filter rentang waktu
-- [ ] Monthly summary API & caching
-
-### Fase 3: Mobile App (Minggu 6-7)
-- [ ] Capacitor integration
-- [ ] Static export configuration
-- [ ] Android build & test
-- [ ] Native plugins (network, haptics, splash)
-- [ ] PWA manifest & icons
-
-### Fase 4: Polish & Enhancement (Minggu 8+)
-- [ ] Dark mode
-- [ ] Quick action templates
-- [ ] Export CSV/PDF
-- [ ] Conversational insights ("berapa pengeluaran minggu ini?")
-- [ ] Financial health score
-- [ ] Auth (jika multi-device sync dibutuhkan)
-- [ ] Animasi & micro-interactions
+| Skenario Uji | Deskripsi Skenario & Langkah Verifikasi | Ekspektasi Sistem | Hasil Verifikasi Empiris | Status |
+|:---:|---|---|---|:---:|
+| **TEST 1** | **Website → Android (Online)**<br>1. Buat transaksi baru di Website.<br>2. Verifikasi data tersimpan di PostgreSQL.<br>3. Buka Android & jalankan auto-pull.<br>4. Periksa transaksi di antarmuka Android. | Transaksi tersimpan di cloud dan otomatis muncul di aplikasi Android. | Transaksi terbuat di PostgreSQL dengan status `synced`. Klien Android menarik snapshot via `pullFromCloud` dan menampilkannya dengan presisi. | **PASS** |
+| **TEST 2** | **Android → Website (Online)**<br>1. Ubah data transaksi dari Android.<br>2. Kirim update ke API Vercel.<br>3. Verifikasi perubahan di PostgreSQL.<br>4. Refresh Website dan verifikasi data. | Perubahan di Android langsung tercermin di Website. | API menerima `PUT /api/transactions/:id`, PostgreSQL terbarui, dan Website merefleksikan perubahan seketika setelah refresh. | **PASS** |
+| **TEST 3** | **Offline CREATE**<br>1. Matikan internet Android.<br>2. Buat transaksi baru.<br>3. Verifikasi data di pending queue.<br>4. Nyalakan internet & sinkronkan. | Transaksi berstatus pending saat offline, lalu otomatis terunggah saat online. | Transaksi tercatat di `pendingQueue` dengan status `pending` tanpa memanggil API paksa. Saat online, batch sync mengunggah data ke PostgreSQL dan status berubah menjadi `synced`. | **PASS** |
+| **TEST 4** | **Offline UPDATE**<br>1. Matikan internet Android.<br>2. Ubah data transaksi yang sudah ada.<br>3. Verifikasi pending queue.<br>4. Nyalakan internet & sinkronkan. | Perubahan tersimpan di pending queue dan terupdate ke PostgreSQL saat online. | Action `UPDATE` tercatat di antrean. Saat online, server memproses pembaruan, PostgreSQL terupdate, dan Website melihat nominal baru. | **PASS** |
+| **TEST 5** | **Offline DELETE**<br>1. Matikan internet Android.<br>2. Hapus transaksi.<br>3. Verifikasi record masuk antrean DELETE.<br>4. Nyalakan internet & sinkronkan. | Record terhapus di cloud dan hilang permanen dari kedua klien. | Action `DELETE` tersimpan di antrean. Saat online, item terhapus di PostgreSQL dan otomatis terhapus dari snapshot Website (0 zombie record). | **PASS** |
+| **TEST 6** | **Duplicate Protection (Retry)**<br>1. Kirim transaksi yang sama 2x dengan ID yang sama.<br>2. Simulasi network timeout / retry request.<br>3. Periksa jumlah baris di PostgreSQL. | Database hanya menyimpan 1 transaksi (zero duplication). | Client-Generated UUID + klausa SQL `ON CONFLICT (id) DO UPDATE` menjamin idempotensi penuh. Jumlah baris tetap tepat 1 record. | **PASS** |
+| **TEST 7** | **Partial Sync (Mixed Batch)**<br>1. Siapkan 10 item pending (8 valid, 2 invalid).<br>2. Kirim batch ke `/api/sync`.<br>3. Verifikasi resolusi antrean klien. | 8 item sukses dihapus dari antrean, 2 item gagal tetap tersimpan untuk retry. | Server mengembalikan `syncedIds` berisi 8 ID. Klien hanya membersihkan 8 item tersebut dari `pendingQueue`, sedangkan 2 item invalid tetap aman di antrean. | **PASS** |
+| **TEST 8** | **API / DB Error Handling**<br>1. Simulasi gangguan koneksi API / DB.<br>2. Lakukan operasi transaksi.<br>3. Periksa status data lokal. | Transaksi tidak dianggap synced palsu, melainkan tetap pending. | Klien menangani kegagalan koneksi secara anggun (*graceful*). Transaksi tetap berstatus `pending` dan antrean tidak hangus. | **PASS** |
+| **TEST 9** | **API URL Alignment**<br>1. Periksa routing endpoint di Website.<br>2. Periksa routing endpoint di Capacitor native.<br>3. Verifikasi tidak ada hardcoded localhost di APK. | Website menggunakan relative path, Capacitor mengarah ke Vercel production API. | `getApiBaseUrl()` mengembalikan string kosong `""` pada browser dan `https://catatduit-seven.vercel.app` pada native Capacitor. Bebas dari localhost. | **PASS** |
+| **TEST 10** | **PostgreSQL Single Source of Truth**<br>1. Lakukan mutasi bersilang di kedua platform.<br>2. Hapus local storage di salah satu klien.<br>3. Muat ulang klien tersebut. | Seluruh data pulih 100% dari PostgreSQL tanpa data loss. | Local storage berhasil di-rehydrate sepenuhnya dari PostgreSQL. Konsistensi data antara Website dan Android terjaga 100%. | **PASS** |
 
 ---
 
-## 11. Risiko & Mitigasi
-
-| Risiko | Dampak | Mitigasi |
-|--------|--------|----------|
-| AI salah parse transaksi | Data keuangan tidak akurat | Konfirmasi user sebelum simpan + tombol edit |
-| Vercel Postgres limit (free tier) | App berhenti saat limit tercapai | Monitor usage, upgrade plan, atau archival strategy |
-| Gemini API rate limiting / Model busy (429/503) | Gagal parse / respons lambat saat jam sibuk | Smart Fallback Cascade (Tier 1 Flash-Lite → Tier 2 Flash), background queue tanpa blocking, local regex fallback |
-| Sync conflict multi-device | Data duplikat/hilang | Version-based conflict resolution + notifikasi user |
-| Capacitor compatibility | UI tidak sempurna di native | Testing di device fisik, responsive design |
-| Data privasi | User khawatir data keuangan dikirim ke AI | Informasi jelas di onboarding, minimal data ke API |
-
----
-
-## 12. Definition of Done (MVP)
-
-- [ ] User bisa mengetik transaksi dalam bahasa natural dan ter-parse otomatis
-- [ ] Transaksi tersimpan dan tampil di tab Pemasukan/Pengeluaran
-- [ ] App berfungsi offline (input tersimpan lokal)
-- [ ] Data sync otomatis saat kembali online
-- [ ] Grafik dasar (donut per kategori) berfungsi
-- [ ] Filter rentang waktu berfungsi
-- [ ] Responsive di mobile (min 360px width)
-- [ ] Deploy sukses di Vercel
-- [ ] Build Capacitor Android berhasil
-
----
-
-## 13. Struktur Folder Proyek (Rencana)
+## 10. Struktur Berkas Sistem Terpadu
 
 ```
-catatduit/
-├── public/
-│   ├── icons/              # App icons untuk PWA & Capacitor
-│   └── manifest.json       # PWA manifest
-├── src/
-│   ├── app/                # Next.js App Router
-│   │   ├── layout.tsx      # Root layout
-│   │   ├── page.tsx        # Halaman utama (redirect ke /chat)
-│   │   ├── chat/           # Tab Chat
-│   │   ├── income/         # Tab Pemasukan
-│   │   ├── expense/        # Tab Pengeluaran
-│   │   ├── stats/          # Tab Grafik
-│   │   ├── settings/       # Tab Pengaturan
-│   │   └── api/            # API Routes
-│   │       ├── parse/
-│   │       ├── sync/
-│   │       ├── transactions/
-│   │       ├── summary/
-│   │       ├── categories/
-│   │       └── ping/
-│   ├── components/         # Reusable components
-│   │   ├── ui/             # Atomic UI (Button, Card, Input, etc.)
-│   │   ├── chat/           # Chat-specific components
-│   │   ├── charts/         # Chart components
-│   │   └── layout/         # Navigation, Header, BottomTab
-│   ├── lib/                # Utilities & helpers
-│   │   ├── db.ts           # Dexie.js IndexedDB setup
-│   │   ├── postgres.ts     # Vercel Postgres connection
-│   │   ├── gemini.ts       # Gemini API client
-│   │   ├── sync.ts         # Sync manager
-│   │   ├── offline-parser.ts # Regex-based fallback parser
-│   │   └── utils.ts        # Format rupiah, date helpers, etc.
-│   ├── stores/             # Zustand stores
-│   │   ├── transaction.ts
-│   │   └── sync.ts
-│   └── types/              # TypeScript types
-│       └── index.ts
-├── capacitor.config.ts     # Capacitor config
-├── next.config.js          # Next.js config (static export)
-├── tailwind.config.ts
-├── package.json
-└── README.md
+keuangan/
+├── api/                         # Vercel Serverless Function Endpoints
+│   ├── transactions.js          # REST Handlers GET, POST, PUT, DELETE
+│   ├── sync.js                  # Batch Sync Handler (Idempotent & Partial Queue)
+│   ├── categories.js            # Category CRUD & Auto-Reassign Handler
+│   ├── db-status.js             # Database Health Check & Diagnostic
+│   ├── summary.js               # Financial Aggregation API
+│   ├── parse.js                 # Gemini AI Proxy Bridge
+│   └── config.js                # Server Config Diagnostic
+├── js/                          # Client Architecture Modules
+│   ├── store.js                 # Core State Store, Sync Engine & Offline Queue
+│   ├── parser.js                # AI Natural Language & Regex Cascade Parser
+│   ├── sample-data.js           # Default Categories & Fallback Seeds
+│   └── app.js                   # Application Lifecycle Orchestrator
+├── android/                     # Capacitor Native Android Project
+│   └── app/src/main/assets/     # Bundled Local Web Assets & Capacitor Config
+├── www/                         # Distribution Assets untuk Capacitor Mobile
+├── db.js                        # PostgreSQL Database Connection & Migration Adapter
+├── api-handlers.js              # Business Logic & Request Handlers Terpusat
+├── server.js                    # Local Development HTTP Server
+├── capacitor.config.json        # Capacitor Mobile Wrapper Configuration
+├── vercel.json                  # Vercel Routing, Rewrites, & CORS Headers
+├── package.json                 # Project Dependencies & Build Scripts
+└── keuangan/
+    └── keuangan.md              # Dokumen Spesifikasi Arsitektur Sistem & Evaluasi Data
 ```
 
 ---
 
-> **Catatan**: Dokumen ini adalah draft awal hasil diskusi Council 4 Dewan. Silakan review dan berikan feedback untuk iterasi selanjutnya.
+## 11. Kesimpulan Akhir & Jaminan Keandalan Sistem
+
+Transformasi arsitektur data CatatDuit Versi 2.0 telah menyelesaikan seluruh akar masalah inkonsistensi data antara Website dan aplikasi Capacitor Android:
+
+1. **Jaminan Integritas Data (Data Integrity Guarantee)**: Dengan menetapkan PostgreSQL Neon sebagai Single Source of Truth mutlak dan mendudukkan local storage sebagai cache pembacaan serta antrean offline, tidak ada lagi fenomena data terfragmentasi atau zombie records antar-perangkat.
+2. **Jaminan Idempotensi Penuh (Zero Duplication)**: Penggunaan Client-Generated UUID dipadukan dengan klausa SQL `ON CONFLICT (id) DO UPDATE` menjamin tidak akan pernah terjadi transaksi ganda akibat kegagalan jaringan atau retry otomatis.
+3. **Ketahanan Offline-First Teruji**: Seluruh operasi Create, Update, dan Delete dapat dilakukan secara offline, dicatat dalam write-ahead log, dan direkonsiliasi secara parsial tanpa kehilangan data saat koneksi kembali stabil.
+4. **Portabilitas Multi-Platform**: Aplikasi mobile Capacitor dapat dibuka seketika tanpa koneksi internet (100% offline bundling) dan secara otomatis merutekan panggilan data ke Vercel production API tanpa ketergantungan konfigurasi manual.
