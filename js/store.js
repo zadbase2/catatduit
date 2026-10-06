@@ -17,6 +17,7 @@ class CatatDuitStore {
     };
 
     this.listeners = new Set();
+    this.realtimeChannel = null;
     this.dbStatus = {
       connected: false,
       provider: 'initializing',
@@ -25,6 +26,7 @@ class CatatDuitStore {
     };
 
     this.init();
+    this.initRealtimeSync();
   }
 
   init() {
@@ -90,7 +92,7 @@ class CatatDuitStore {
         {
           id: 'msg-welcome-1',
           sender: 'ai',
-          text: 'Halo! Saya asisten pintar CatatDuit 🤖. Ketik apa saja yang baru kamu beli atau dapatkan seperti chat biasa, saya yang atur pencatatannya!',
+          text: 'Halo! Saya asisten cerdas CatatDuit ✨. Ketik apa saja yang baru kamu beli atau dapatkan seperti chat biasa, saya yang atur pencatatannya!',
           timestamp: new Date().toISOString()
         },
         {
@@ -111,6 +113,49 @@ class CatatDuitStore {
         }
       });
     }, 100);
+  }
+
+  // --- Realtime Cross-Tab Broadcast Channel ---
+  initRealtimeSync() {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        this.realtimeChannel = new BroadcastChannel('catatduit_realtime_sync');
+        this.realtimeChannel.onmessage = (event) => {
+          if (event.data && event.data.type === 'DATA_CHANGED') {
+            this.notify();
+          }
+        };
+      } catch (err) {
+        console.warn('BroadcastChannel initialization notice:', err);
+      }
+    }
+
+    // Universal storage event listener for cross-tab sync fallback
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', (e) => {
+        if (
+          e.key === this.STORAGE_KEYS.TRANSACTIONS ||
+          e.key === this.STORAGE_KEYS.CATEGORIES ||
+          e.key === this.STORAGE_KEYS.SETTINGS
+        ) {
+          this.notify();
+        }
+      });
+    }
+  }
+
+  broadcastChange(reason = 'data_changed') {
+    if (this.realtimeChannel) {
+      try {
+        this.realtimeChannel.postMessage({
+          type: 'DATA_CHANGED',
+          reason,
+          timestamp: Date.now()
+        });
+      } catch (e) {
+        // silent fallback
+      }
+    }
   }
 
   // --- Network & Base URL Helpers ---
@@ -167,7 +212,13 @@ class CatatDuitStore {
   // --- Backend / DB Cloud Health ---
   async refreshDbStatus() {
     try {
-      const res = await fetch(this.apiUrl('/api/db-status'));
+      const res = await fetch(this.apiUrl(`/api/db-status?_t=${Date.now()}`), {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
       if (res.ok) {
         const data = await res.json();
         this.dbStatus = data;
@@ -198,7 +249,13 @@ class CatatDuitStore {
     if (!this.isOnline()) return false;
 
     try {
-      const res = await fetch(this.apiUrl('/api/transactions?limit=500'));
+      const res = await fetch(this.apiUrl(`/api/transactions?limit=500&_t=${Date.now()}`), {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
       if (!res.ok) return false;
 
       const data = await res.json();
@@ -230,7 +287,16 @@ class CatatDuitStore {
       const merged = Array.from(resultMap.values());
       merged.sort((a, b) => new Date(b.transaction_date || b.created_at) - new Date(a.transaction_date || a.created_at));
 
-      this.saveTransactions(merged);
+      // Realtime Diff Check: only update storage and broadcast if actual difference exists
+      const isDifferent = (merged.length !== localTxs.length) ||
+        merged.some((m, idx) => {
+          const l = localTxs[idx];
+          return !l || m.id !== l.id || Number(m.amount) !== Number(l.amount) || m.description !== l.description || m.sync_status !== l.sync_status;
+        });
+
+      if (isDifferent) {
+        this.saveTransactions(merged);
+      }
       return true;
     } catch (err) {
       console.warn('pullFromCloud network error:', err.message);
@@ -241,11 +307,20 @@ class CatatDuitStore {
   async pullCategoriesFromCloud() {
     if (!this.isOnline()) return false;
     try {
-      const catRes = await fetch(this.apiUrl('/api/categories'));
+      const catRes = await fetch(this.apiUrl(`/api/categories?_t=${Date.now()}`), {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
       if (catRes.ok) {
         const catData = await catRes.json();
         if (catData.categories && catData.categories.length > 0) {
-          this.saveCategories(catData.categories);
+          const currentCats = this.getCategories();
+          if (JSON.stringify(catData.categories) !== JSON.stringify(currentCats)) {
+            this.saveCategories(catData.categories);
+          }
           return true;
         }
       }
@@ -304,6 +379,7 @@ class CatatDuitStore {
   saveTransactions(txs) {
     localStorage.setItem(this.STORAGE_KEYS.TRANSACTIONS, JSON.stringify(txs));
     this.notify();
+    this.broadcastChange('transactions_updated');
   }
 
   addTransaction(txData) {
@@ -481,6 +557,7 @@ class CatatDuitStore {
   saveCategories(cats) {
     localStorage.setItem(this.STORAGE_KEYS.CATEGORIES, JSON.stringify(cats));
     this.notify();
+    this.broadcastChange('categories_updated');
   }
 
   addCategory(cat) {

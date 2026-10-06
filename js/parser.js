@@ -225,11 +225,11 @@ class AIParser {
 
   formatModelBadge(modelName) {
     if (!modelName || modelName === 'local_regex') return '⚡ Local Regex (Offline)';
-    if (modelName.includes('flash-lite')) return '🤖 Gemini Flash-Lite';
-    if (modelName.includes('3.8-flash')) return '🤖 Gemini 3.8 Flash';
-    if (modelName.includes('3.5-flash')) return '🤖 Gemini 3.5 Flash';
-    if (modelName.includes('flash')) return '🤖 Gemini Flash';
-    return `🤖 Gemini (${modelName.replace('models/', '')})`;
+    if (modelName.includes('flash-lite')) return '✨ Gemini Flash-Lite';
+    if (modelName.includes('3.8-flash')) return '✨ Gemini 3.8 Flash';
+    if (modelName.includes('3.5-flash')) return '✨ Gemini 3.5 Flash';
+    if (modelName.includes('flash')) return '✨ Gemini Flash';
+    return `✨ Gemini (${modelName.replace('models/', '')})`;
   }
 
   matchCategoryToStore(catName, type) {

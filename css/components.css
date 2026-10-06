@@ -622,24 +622,37 @@
 }
 
 /* ─── CHAT AI COPILOT VIEW ─── */
+#tab-chat.active {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - var(--header-height) - 48px);
+  max-height: calc(100dvh - var(--header-height) - 48px);
+  overflow: hidden;
+}
+
 .chat-view-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - var(--header-height) - 48px);
+  height: 100%;
+  flex: 1;
+  min-height: 0;
   background: var(--bg-card);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   overflow: hidden;
+  position: relative;
 }
 
 .chat-view-header {
+  flex-shrink: 0;
   padding: 16px 24px;
   border-bottom: 1px solid var(--border-light);
   display: flex;
   align-items: center;
   justify-content: space-between;
   background: var(--bg-card);
+  z-index: 2;
 }
 
 .chat-header-title-box {
@@ -658,11 +671,15 @@
   justify-content: center;
   color: #ffffff;
   font-size: 18px;
+  box-shadow: 0 2px 8px rgba(19, 102, 217, 0.25);
 }
 
 .chat-feed-scroll {
-  flex: 1;
+  flex: 1 1 0%;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -689,13 +706,29 @@
   height: 34px;
   min-width: 34px;
   border-radius: var(--radius-full);
-  background: var(--bg-card);
-  border: 1px solid var(--border-light);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
   box-shadow: var(--shadow-sm);
+}
+
+.chat-avatar.ai-avatar-badge {
+  background: linear-gradient(135deg, #1366d9 0%, #3cd070 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 8px rgba(19, 102, 217, 0.25);
+}
+
+.chat-avatar.user-avatar-badge {
+  background: var(--bg-hover);
+  color: var(--text-heading);
+  border: 1px solid var(--border-light);
+}
+
+.chat-avatar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .chat-bubble {
@@ -941,12 +974,15 @@
 }
 
 .chat-input-bar-container {
-  padding: 16px 24px;
+  flex-shrink: 0;
+  padding: 14px 24px;
   border-top: 1px solid var(--border-light);
   background: var(--bg-card);
   display: flex;
   flex-direction: column;
   gap: 10px;
+  position: relative;
+  z-index: 5;
 }
 
 .chat-input-form {

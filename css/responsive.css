@@ -195,15 +195,26 @@
     max-height: 200px;
   }
 
-  /* Chat view fits mobile screen comfortably */
+  /* Chat view fits mobile screen comfortably and prevents screen scroll shifting */
+  #tab-chat.active {
+    height: calc(100dvh - var(--header-height) - 76px);
+    max-height: calc(100dvh - var(--header-height) - 76px);
+    overflow: hidden;
+  }
+
   .chat-view-container {
-    height: calc(100vh - var(--header-height) - 86px);
+    height: 100%;
     width: 100%;
     max-width: 100%;
   }
 
+  .chat-view-header {
+    padding: 12px 14px;
+  }
+
   .chat-feed-scroll {
     padding: 12px 10px;
+    gap: 12px;
   }
 
   .chat-bubble-row {
@@ -211,7 +222,7 @@
   }
 
   .chat-input-bar-container {
-    padding: 10px 12px;
+    padding: 8px 10px;
   }
 
   /* Data Table toolbar wraps smoothly */

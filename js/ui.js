@@ -21,6 +21,8 @@ const UI = {
   ICONS: {
     home: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
     chatAi: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/><path d="m11 9 1 2 2 1-2 1-1 2-1-2-2-1 2-1z" fill="currentColor" fill-opacity="0.3"/></svg>`,
+    aiSparkle: `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="m12 2 2.4 5.6L20 10l-5.6 2.4L12 18l-2.4-5.6L4 10l5.6-2.4z"/><path d="M19 15l1 2.2 2.2 1-2.2 1-1 2.2-1-2.2-2.2-1 2.2-1z" opacity="0.8"/></svg>`,
+    userAvatar: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
     income: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6"/><path d="M9 9v6h6"/></svg>`,
     expense: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 15l6-6"/><path d="M15 15V9H9"/></svg>`,
     stats: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>`,
@@ -276,6 +278,7 @@ const UI = {
     if (tabName === 'dashboard') {
       this.renderDashboardView();
     } else if (tabName === 'chat') {
+      window.scrollTo(0, 0);
       this.scrollToBottomChat();
     } else if (tabName === 'stats') {
       this.renderStatsView();
@@ -416,8 +419,7 @@ const UI = {
   focusChatInput() {
     const input = document.getElementById('chatInputField');
     if (input) {
-      input.focus();
-      input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      input.focus({ preventScroll: true });
     }
   },
 
@@ -551,6 +553,11 @@ const UI = {
     if (!container) return;
 
     const history = window.store.getChatHistory();
+    const historySig = JSON.stringify(history);
+    if (container.dataset.historySig === historySig) {
+      return; // History unchanged, preserve scroll position exactly!
+    }
+    container.dataset.historySig = historySig;
 
     container.innerHTML = history.map(msg => {
       const isUser = msg.sender === 'user';
@@ -560,7 +567,7 @@ const UI = {
       if (msg.isThinking) {
         return `
           <div class="chat-bubble-row ai">
-            <div class="chat-avatar">🤖</div>
+            <div class="chat-avatar ai-avatar-badge">${this.ICONS.aiSparkle}</div>
             <div class="chat-bubble">
               <div class="ai-typing-indicator">
                 <span class="pulse-dot"></span>
@@ -575,7 +582,7 @@ const UI = {
       if (msg.parsedTx) {
         const tx = msg.parsedTx;
         const isInc = tx.type === 'income';
-        const modelBadge = tx.model_badge || (this.parser && this.parser.formatModelBadge ? this.parser.formatModelBadge(tx.parsed_by) : '🤖 Gemini AI');
+        const modelBadge = tx.model_badge || (this.parser && this.parser.formatModelBadge ? this.parser.formatModelBadge(tx.parsed_by) : '✨ Gemini AI');
 
         if (tx.needs_clarification) {
           previewCardHtml = `
@@ -658,9 +665,13 @@ const UI = {
         }
       }
 
+      const avatarHtml = isUser
+        ? `<div class="chat-avatar user-avatar-badge">${this.ICONS.userAvatar}</div>`
+        : `<div class="chat-avatar ai-avatar-badge">${this.ICONS.aiSparkle}</div>`;
+
       return `
         <div class="chat-bubble-row ${isUser ? 'user' : 'ai'}">
-          <div class="chat-avatar">${isUser ? '👤' : '🤖'}</div>
+          ${avatarHtml}
           <div class="chat-bubble">
             <div>${msg.text}</div>
             ${previewCardHtml}
@@ -1685,6 +1696,20 @@ const UI = {
         this.autoSync();
       }
     }, 2500);
+
+    // Active Realtime Cloud Sync: Polling every 8 seconds when online and tab is active
+    setInterval(() => {
+      if (document.hidden) return; // Do not poll while minimized
+      const settings = window.store.getSettings();
+      if (!settings.isOfflineMode && navigator.onLine && window.store && window.store.pullFromCloud) {
+        const queue = window.store.getPendingQueue();
+        if (queue.length > 0) {
+          this.autoSync();
+        } else {
+          window.store.pullFromCloud();
+        }
+      }
+    }, 8000);
 
     // Settings dark mode switch
     const themeSwitch = document.getElementById('darkModeSwitch');

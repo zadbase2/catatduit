@@ -79,7 +79,7 @@ Kamu juga bisa langsung membuka file [index.html](file:///d:/downloadan/keuangan
 
 ---
 
-## 🤖 Integrasi Google AI Studio (Gemini Multi-Tier Adaptive Cascade)
+## ✨ Integrasi Google AI Studio (Gemini Multi-Tier Adaptive Cascade)
 
 Aplikasi CatatDuit terhubung langsung ke **Google AI Studio API** menggunakan arsitektur **Adaptive Fallback Cascade**:
 
